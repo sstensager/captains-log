@@ -1,0 +1,15 @@
+.venv/
+.env
+data/
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Personal data — never publish
+config.py
+sample_notes.md
+*.ipynb
+
+# v1 archive — kept locally, not published
+_archive/

@@ -1,0 +1,14 @@
+DB_PATH   = "data/captain_log.db"
+USER_NAME = "Your Name"  # The narrator of all log entries — the system skips this name during entity extraction
+
+# Task status model — swap to match your workflow, e.g.:
+#   Simple:       ['todo', 'done']
+#   Later/Now:    ['now', 'later', 'done']
+#   GTD:          ['next', 'waiting', 'someday', 'done', 'cancelled']
+TASK_STATUSES       = ['todo', 'done', 'cancelled']
+TASK_STATUS_DEFAULT = 'todo'
+TASK_STATUS_DONE    = 'done'
+
+# Minimum EntityReference count for background Attribute extraction.
+# Entities below this threshold keep excerpts only; adjust to experiment.
+ATTRIBUTE_EXTRACTION_MIN_REFS = 3
