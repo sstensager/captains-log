@@ -1,8 +1,11 @@
-import React, { useRef, useState } from 'react'
-import type { EntityDetail } from '../../types'
+import React, { useEffect, useRef, useState } from 'react'
+import type { Annotation, EntityDetail, EntitySummary } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate } from '../../utils/time'
-import { updateEntity } from '../../api'
+import { updateEntity, deleteEntity, mergeEntity, fetchEntities, promoteAnnotation } from '../../api'
+
+// Keep in sync with VALID_ENTITY_TYPES in server.py
+const ENTITY_TYPES = ['person', 'place', 'pet', 'organization', 'event', 'thing', 'idea']
 
 export function highlightInExcerpt(excerpt: string, name: string): React.ReactNode {
   const idx = excerpt.toLowerCase().indexOf(name.toLowerCase())
@@ -22,10 +25,18 @@ export default function EntityDetailView({
   entity,
   onSelectLog,
   onUpdated,
+  onDeleted,
+  onMerged,
+  pendingSuggestions,
+  onSuggestionConfirmed,
 }: {
   entity: EntityDetail
   onSelectLog: (id: number) => void
   onUpdated?: (updated: EntityDetail) => void
+  onDeleted?: () => void
+  onMerged?: (winner: EntityDetail) => void
+  pendingSuggestions?: Annotation[]
+  onSuggestionConfirmed?: () => void
 }) {
   const c = colorFor(entity.type)
 
@@ -65,16 +76,61 @@ export default function EntityDetailView({
     }
   }
 
+  const [savingType, setSavingType] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+
+  const changeType = async (newType: string) => {
+    if (newType === entity.type || savingType) return
+    setSavingType(true)
+    try {
+      const updated = await updateEntity(entity.id, { entity_type: newType })
+      onUpdated?.(updated)
+    } finally {
+      setSavingType(false)
+    }
+  }
+
+  const handleConfirm = async () => {
+    if (!pendingSuggestions?.length || confirming) return
+    setConfirming(true)
+    try {
+      await promoteAnnotation(pendingSuggestions[0].id)
+      onSuggestionConfirmed?.()
+    } finally {
+      setConfirming(false)
+    }
+  }
+
   return (
     <div className="px-4 py-4 space-y-5">
-      {/* Badge + inline name */}
+      {/* Confirm suggestion banner */}
+      {pendingSuggestions && pendingSuggestions.length > 0 && (
+        <div className="flex items-center justify-between px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+          <span className="text-xs text-amber-700">
+            {pendingSuggestions.length === 1 ? 'Suggested in this log' : `${pendingSuggestions.length} suggestions in this log`}
+          </span>
+          <button
+            onClick={handleConfirm}
+            disabled={confirming}
+            className="text-xs font-medium text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors font-mono"
+          >
+            {confirming ? 'Linking…' : `[[${entity.name}]]`}
+          </button>
+        </div>
+      )}
+      {/* Type dropdown + inline name */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span
-          className="text-xs font-medium px-2 py-1 rounded-full border shrink-0"
+        <select
+          value={entity.type}
+          onChange={e => changeType(e.target.value)}
+          disabled={savingType}
+          className="text-xs font-medium px-2 py-1 rounded-full border appearance-none cursor-pointer disabled:opacity-40 hover:opacity-75 transition-opacity"
           style={{ backgroundColor: c.bg, borderColor: c.border, color: c.text }}
         >
-          {entity.type}
-        </span>
+          {ENTITY_TYPES.map(t => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
         {editingName ? (
           <input
             ref={nameRef}
@@ -232,6 +288,226 @@ export default function EntityDetailView({
           </div>
         </section>
       )}
+      {/* Archive + Merge */}
+      <MergeButton entity={entity} onMerged={onMerged} />
+      <ArchiveButton entity={entity} onDeleted={onDeleted} />
+    </div>
+  )
+}
+
+function MergeButton({
+  entity,
+  onMerged,
+}: {
+  entity: EntityDetail
+  onMerged?: (winner: EntityDetail) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [candidates, setCandidates] = useState<EntitySummary[]>([])
+  const [target, setTarget] = useState<EntitySummary | null>(null)
+  // null = not chosen yet, 'entity' = current entity wins, 'target' = target wins
+  const [winner, setWinner] = useState<'entity' | 'target' | null>(null)
+  const [merging, setMerging] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (open) {
+      fetchEntities().then(all =>
+        setCandidates(all.filter(e => e.id !== entity.id))
+      )
+      setTimeout(() => inputRef.current?.focus(), 0)
+    } else {
+      setQuery('')
+      setTarget(null)
+      setWinner(null)
+    }
+  }, [open, entity.id])
+
+  const filtered = candidates.filter(e =>
+    e.name.toLowerCase().includes(query.toLowerCase())
+  )
+
+  const handleMerge = async () => {
+    if (!target || !winner) return
+    setMerging(true)
+    // loser is merged into winner; API: merge(loser_id, winner_id)
+    const loserId  = winner === 'entity' ? target.id  : entity.id
+    const winnerId = winner === 'entity' ? entity.id  : target.id
+    try {
+      const result = await mergeEntity(loserId, winnerId)
+      onMerged?.(result)
+      setOpen(false)
+    } catch (err) {
+      console.error('Merge failed:', err)
+    } finally {
+      setMerging(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="pt-1">
+        <button
+          onClick={() => setOpen(true)}
+          className="text-xs text-gray-400 hover:text-blue-500 transition-colors"
+        >
+          Merge with…
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="pt-2 border-t border-gray-100 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-gray-500">Merge with…</span>
+        <button onClick={() => setOpen(false)} className="text-gray-300 hover:text-gray-600 text-sm leading-none">×</button>
+      </div>
+
+      {target && winner ? (
+        // Step 3: final confirm
+        <div className="space-y-2">
+          <p className="text-xs text-gray-600">
+            <span className="font-medium line-through text-gray-400">
+              {winner === 'entity' ? target.name : entity.name}
+            </span>
+            {' → '}
+            <span className="font-medium">
+              {winner === 'entity' ? entity.name : target.name}
+            </span>
+            {'. All mentions will be reattributed.'}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleMerge}
+              disabled={merging}
+              className="text-xs px-2.5 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40 transition-colors"
+            >
+              {merging ? 'Merging…' : 'Confirm merge'}
+            </button>
+            <button
+              onClick={() => setWinner(null)}
+              className="text-xs px-2.5 py-1 border border-gray-200 text-gray-500 rounded hover:border-gray-400 transition-colors"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      ) : target ? (
+        // Step 2: pick winner
+        <div className="space-y-1.5">
+          <p className="text-xs text-gray-500">Which one survives?</p>
+          {[
+            { key: 'entity' as const, name: entity.name, type: entity.type, refCount: null },
+            { key: 'target' as const, name: target.name, type: target.type, refCount: target.ref_count },
+          ].map(opt => {
+            const c = colorFor(opt.type)
+            return (
+              <button
+                key={opt.key}
+                onClick={() => setWinner(opt.key)}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-left transition-colors"
+              >
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
+                <span className="text-xs text-gray-800 flex-1 font-medium">{opt.name}</span>
+                {opt.refCount != null && (
+                  <span className="text-xs text-gray-400">{opt.refCount} refs</span>
+                )}
+              </button>
+            )
+          })}
+          <button
+            onClick={() => setTarget(null)}
+            className="text-xs text-gray-400 hover:text-gray-600"
+          >
+            ← Back
+          </button>
+        </div>
+      ) : (
+        // Step 1: search for other entity
+        <div className="space-y-1">
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Search entities…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            className="w-full text-xs px-2 py-1.5 rounded border border-gray-200 outline-none focus:border-gray-400 bg-gray-50"
+          />
+          <div className="max-h-36 overflow-y-auto space-y-0.5">
+            {filtered.slice(0, 20).map(e => {
+              const c = colorFor(e.type)
+              return (
+                <button
+                  key={e.id}
+                  onClick={() => setTarget(e)}
+                  className="w-full flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-50"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
+                  <span className="text-xs text-gray-800 flex-1 truncate">{e.name}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{e.ref_count}</span>
+                </button>
+              )
+            })}
+            {filtered.length === 0 && (
+              <p className="text-xs text-gray-400 text-center py-2">No matches</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ArchiveButton({ entity, onDeleted }: { entity: EntityDetail; onDeleted?: () => void }) {
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await deleteEntity(entity.id)
+      onDeleted?.()
+    } finally {
+      setDeleting(false)
+      setConfirming(false)
+    }
+  }
+
+  if (!confirming) {
+    return (
+      <div className="pt-2 border-t border-gray-100">
+        <button
+          onClick={() => setConfirming(true)}
+          className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+        >
+          Archive entity
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="pt-2 border-t border-gray-100 space-y-1.5">
+      <p className="text-xs text-gray-500">
+        Archive <span className="font-medium">{entity.name}</span>? It will be hidden everywhere but notes stay intact.
+      </p>
+      <div className="flex gap-2">
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="text-xs px-2.5 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-40 transition-colors"
+        >
+          {deleting ? 'Archiving…' : 'Yes, archive'}
+        </button>
+        <button
+          onClick={() => setConfirming(false)}
+          className="text-xs px-2.5 py-1 border border-gray-200 text-gray-500 rounded hover:border-gray-400 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   )
 }

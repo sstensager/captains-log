@@ -12,7 +12,7 @@ import sqlite3
 
 # ── Todo extraction ───────────────────────────────────────────────────────────
 
-_TODO_LINE_RE = re.compile(r'^(\s*)\[[ xX]?\]\s*(.+)')
+_TODO_LINE_RE = re.compile(r'^(\s*)(?:[-*]\s+)?\[[ xX]?\]\s*(.+)')
 
 
 def _find_section(lines: list[str], line_index: int) -> str | None:
@@ -24,7 +24,7 @@ def _find_section(lines: list[str], line_index: int) -> str | None:
         stripped = lines[i].strip()
         if not stripped:
             continue  # skip blank lines
-        if re.match(r'^\s*\[[ xX]?\]\s*.+', lines[i]):
+        if re.match(r'^\s*(?:[-*]\s+)?\[[ xX]?\]\s*.+', lines[i]):
             continue  # skip sibling todo lines
         return stripped
     return None
@@ -46,7 +46,7 @@ def extract_todos(log_id: int, raw_text: str, con: sqlite3.Connection) -> dict:
         if not title:
             continue
 
-        checked = bool(re.match(r'^\s*\[[xX]\]', line))
+        checked = bool(re.match(r'^\s*(?:[-*]\s+)?\[[xX]\]', line))
         indent = len(indent_str) // 2
         section = _find_section(lines, idx)
 
@@ -70,8 +70,13 @@ def extract_todos(log_id: int, raw_text: str, con: sqlite3.Connection) -> dict:
 
 # Annotation types that map to Entity rows
 MENTION_TYPE_TO_ENTITY_TYPE: dict[str, str] = {
-    "candidate_person": "Person",
-    "candidate_place":  "Place",
+    "candidate_person":       "Person",
+    "candidate_place":        "Place",
+    "candidate_pet":          "Pet",
+    "candidate_organization": "Organization",
+    "candidate_event":        "Event",
+    "candidate_thing":        "Thing",
+    "candidate_idea":         "Idea",
 }
 
 
@@ -189,15 +194,16 @@ def promote_all_mentions(
     """
     from config import USER_NAME
 
-    rows = con.execute("""
+    type_placeholders = ",".join("?" * len(MENTION_TYPE_TO_ENTITY_TYPE))
+    rows = con.execute(f"""
         SELECT a.id, a.log_id, a.text_span, a.value, a.type,
                a.confidence, a.start_char, a.end_char, l.raw_text
         FROM   Annotation a
         JOIN   Log l ON l.id = a.log_id
-        WHERE  a.type IN ('candidate_person', 'candidate_place')
+        WHERE  a.type IN ({type_placeholders})
         AND    a.confidence >= ?
         ORDER  BY a.log_id, a.id
-    """, (min_confidence,)).fetchall()
+    """, (*MENTION_TYPE_TO_ENTITY_TYPE.keys(), min_confidence)).fetchall()
 
     entities_created = 0
     refs_created     = 0
@@ -235,3 +241,160 @@ def promote_all_mentions(
 
     con.commit()
     return {"entities_created": entities_created, "refs_created": refs_created, "skipped": skipped}
+
+
+# ---------------------------------------------------------------------------
+# [[Name]] and {Name} link extraction
+# ---------------------------------------------------------------------------
+
+_LINK_RE      = re.compile(r'\[\[([^\]]+)\]\]')
+_SOFT_LINK_RE = re.compile(r'\{([^}]+)\}')
+
+
+def extract_links(log_id: int, raw_text: str, con: sqlite3.Connection) -> dict:
+    """
+    Find [[Name]] and {Name} patterns in raw_text and create annotations.
+
+    [[Name]] → provenance='user',  status='accepted', confidence=1.0
+               Auto-creates entity if needed. Creates EntityReference.
+
+    {Name}   → provenance='text',  status='suggested', confidence=0.85
+               Written by the backend after LLM annotation. Does NOT
+               auto-create entities — promote_all_mentions handles that.
+               Idempotent — skips spans already annotated at that position.
+    """
+    created = 0
+
+    # ── [[Name]] hard links ───────────────────────────────────────────────
+    for m in _LINK_RE.finditer(raw_text):
+        name = m.group(1).strip()
+        if not name:
+            continue
+        start_char = m.start()
+        end_char   = m.end()
+
+        if con.execute(
+            "SELECT 1 FROM Annotation WHERE log_id = ? AND start_char = ? AND provenance = 'user'",
+            (log_id, start_char),
+        ).fetchone():
+            continue
+
+        row = con.execute(
+            "SELECT id, entity_type FROM Entity "
+            "WHERE LOWER(canonical_name) = LOWER(?) AND merged_into_id IS NULL AND status != 'archived'",
+            (name,),
+        ).fetchone()
+
+        if row:
+            entity_id, entity_type = row[0], row[1]
+        else:
+            cur = con.execute(
+                "INSERT INTO Entity (canonical_name, entity_type, status, created_from_log_id) "
+                "VALUES (?, 'person', 'tentative', ?)",
+                (name, log_id),
+            )
+            entity_id   = cur.lastrowid
+            entity_type = 'person'
+
+        ann_type = entity_type.lower()
+
+        cur = con.execute(
+            "INSERT INTO Annotation "
+            "  (log_id, type, value, confidence, status, provenance, start_char, end_char, text_span) "
+            "VALUES (?, ?, ?, 1.0, 'accepted', 'user', ?, ?, ?)",
+            (log_id, ann_type, name, start_char, end_char, name),
+        )
+        ann_id = cur.lastrowid
+
+        if not con.execute(
+            "SELECT 1 FROM EntityReference WHERE entity_id = ? AND log_id = ? AND annotation_id = ?",
+            (entity_id, log_id, ann_id),
+        ).fetchone():
+            excerpt = clip_excerpt(raw_text, start_char, end_char)
+            con.execute(
+                "INSERT INTO EntityReference (entity_id, log_id, annotation_id, excerpt, confidence) "
+                "VALUES (?, ?, ?, ?, 1.0)",
+                (entity_id, log_id, ann_id, excerpt),
+            )
+
+        created += 1
+
+    # ── {Name} soft links (written by backend after LLM annotation) ───────
+    for m in _SOFT_LINK_RE.finditer(raw_text):
+        name = m.group(1).strip()
+        if not name:
+            continue
+        start_char = m.start()
+        end_char   = m.end()
+
+        if con.execute(
+            "SELECT 1 FROM Annotation WHERE log_id = ? AND start_char = ? AND provenance = 'text'",
+            (log_id, start_char),
+        ).fetchone():
+            continue
+
+        # Get type from existing entity if possible, else default to 'person'
+        row = con.execute(
+            "SELECT entity_type FROM Entity "
+            "WHERE LOWER(canonical_name) = LOWER(?) AND merged_into_id IS NULL AND status != 'archived'",
+            (name,),
+        ).fetchone()
+        ann_type = row[0].lower() if row else 'person'
+
+        con.execute(
+            "INSERT INTO Annotation "
+            "  (log_id, type, value, confidence, status, provenance, start_char, end_char, text_span) "
+            "VALUES (?, ?, ?, 0.85, 'suggested', 'text', ?, ?, ?)",
+            (log_id, ann_type, name, start_char, end_char, name),
+        )
+        created += 1
+
+    con.commit()
+    return {"links_created": created}
+
+
+# ---------------------------------------------------------------------------
+# Write {Name} markers into raw_text for LLM-detected spans
+# ---------------------------------------------------------------------------
+
+def write_suggested_markers(log_id: int, raw_text: str, con: sqlite3.Connection) -> str:
+    """
+    For each LLM annotation in DB (provenance not 'user' or 'text') that has a
+    valid span, wrap the detected text with {..} if not already wrapped.
+    Processes right-to-left so earlier insertions don't shift later offsets.
+    Updates raw_text + FTS in DB. Returns the (possibly modified) text.
+    """
+    rows = con.execute(
+        "SELECT start_char, end_char FROM Annotation "
+        "WHERE log_id = ? AND provenance NOT IN ('user', 'text') "
+        "AND start_char IS NOT NULL AND end_char IS NOT NULL",
+        (log_id,),
+    ).fetchall()
+
+    if not rows:
+        return raw_text
+
+    # Right-to-left to keep earlier offsets valid
+    spans = sorted(rows, key=lambda r: r[0], reverse=True)
+
+    modified = raw_text
+    for start, end in spans:
+        if start < 0 or end > len(modified) or start >= end:
+            continue
+        # Already wrapped in [[..]] ?
+        if start >= 2 and modified[start - 2:start] == '[[':
+            continue
+        # Already wrapped in {..} ?
+        if start >= 1 and modified[start - 1] == '{' and end < len(modified) and modified[end] == '}':
+            continue
+        modified = modified[:start] + '{' + modified[start:end] + '}' + modified[end:]
+
+    if modified != raw_text:
+        con.execute("UPDATE Log SET raw_text = ? WHERE id = ?", (modified, log_id))
+        try:
+            con.execute("UPDATE Log_fts SET raw_text = ? WHERE rowid = ?", (modified, log_id))
+        except Exception:
+            pass
+        con.commit()
+
+    return modified

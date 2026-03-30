@@ -8,6 +8,7 @@ import type { LogDetail, LogSummary } from './types'
 import { fetchLogs } from './api'
 
 type Page = 'logs' | 'entities' | 'tasks'
+type MobileView = 'list' | 'detail' | 'context'
 
 export default function App() {
   const [page, setPage] = useState<Page>('logs')
@@ -18,6 +19,8 @@ export default function App() {
   const [composing, setComposing] = useState(false)
   const [entityToShow, setEntityToShow] = useState<string | null>(null)
   const [activeTag, setActiveTag] = useState<string | null>(null)
+  const [logRefreshKey, setLogRefreshKey] = useState(0)
+  const [mobileView, setMobileView] = useState<MobileView>('list')
 
   useEffect(() => {
     fetchLogs().then(data => { setLogs(data); setLoading(false) })
@@ -27,16 +30,19 @@ export default function App() {
     setSelectedLogId(id)
     setComposing(false)
     setRightRailOpen(true)
+    setMobileView('detail')
   }
 
   const handleNewLog = () => {
     setComposing(true)
     setSelectedLogId(null)
     setRightRailOpen(false)
+    setMobileView('detail')
   }
 
   const handleCancelCompose = () => {
     setComposing(false)
+    setMobileView('list')
   }
 
   const handleLogCreated = (log: LogDetail) => {
@@ -44,6 +50,7 @@ export default function App() {
       id: log.id,
       raw_text: log.raw_text,
       created_at: log.created_at,
+      updated_at: log.updated_at ?? null,
       source: log.source,
       annotation_types: [],
       tags: [],
@@ -62,31 +69,41 @@ export default function App() {
   const handleEntityClick = (name: string) => {
     setEntityToShow(name)
     setRightRailOpen(true)
+    setMobileView('context')
   }
 
-  // Clicking a mention in entities page switches to logs view and selects the log
   const handleSelectLogFromEntity = (id: number) => {
     setPage('logs')
     setSelectedLogId(id)
     setRightRailOpen(false)
+    setMobileView('detail')
   }
+
+  const handleToggleRightRail = () => {
+    setRightRailOpen(o => !o)
+    setMobileView('context')
+  }
+
+  const NAV_ITEMS: { key: Page; label: string }[] = [
+    { key: 'logs', label: 'Logs' },
+    { key: 'entities', label: 'People & Places' },
+    { key: 'tasks', label: 'Todos' },
+  ]
 
   return (
     <div className="flex flex-col h-screen overflow-hidden w-full">
-      {/* Top nav */}
-      <nav className="shrink-0 flex items-center gap-1 px-4 py-2 border-b border-gray-200 bg-white">
+      {/* Top nav — desktop only */}
+      <nav className="hidden md:flex shrink-0 items-center gap-1 px-4 py-2 border-b border-gray-200 bg-white">
         <span className="text-sm font-semibold text-gray-800 mr-3">Captain's Log</span>
-        {(['logs', 'entities', 'tasks'] as Page[]).map(p => (
+        {NAV_ITEMS.map(({ key, label }) => (
           <button
-            key={p}
-            onClick={() => setPage(p)}
+            key={key}
+            onClick={() => setPage(key)}
             className={`text-sm px-3 py-1 rounded transition-colors ${
-              page === p
-                ? 'bg-gray-900 text-white'
-                : 'text-gray-500 hover:text-gray-800'
+              page === key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
             }`}
           >
-            {p === 'logs' ? 'Logs' : p === 'entities' ? 'People & Places' : 'Todos'}
+            {label}
           </button>
         ))}
       </nav>
@@ -95,35 +112,52 @@ export default function App() {
       <div className="flex flex-1 min-h-0 bg-gray-50">
         {page === 'logs' ? (
           <>
-            <LeftRail
-              logs={logs}
-              loading={loading}
-              selectedLogId={selectedLogId}
-              onSelectLog={handleSelectLog}
-              onNewLog={handleNewLog}
-              onLogsChange={setLogs}
-              activeTag={activeTag}
-              onTagClick={setActiveTag}
-            />
-            <CenterPane
-              selectedLogId={selectedLogId}
-              composing={composing}
-              onNewLog={handleNewLog}
-              onCancelCompose={handleCancelCompose}
-              onLogCreated={handleLogCreated}
-              onLogUpdated={handleLogUpdated}
-              onToggleRightRail={() => setRightRailOpen(o => !o)}
-              rightRailOpen={rightRailOpen}
-              onEntityClick={handleEntityClick}
-              onTagClick={setActiveTag}
-            />
-            <RightRail
-              open={rightRailOpen}
-              selectedLogId={selectedLogId}
-              onClose={() => setRightRailOpen(false)}
-              entityToShow={entityToShow}
-              onSelectLog={handleSelectLog}
-            />
+            {/* Left rail — full screen on mobile when mobileView=list */}
+            <div className={`${mobileView === 'list' ? 'flex' : 'hidden'} md:flex flex-col min-h-0 w-full md:w-auto`}>
+              <LeftRail
+                logs={logs}
+                loading={loading}
+                selectedLogId={selectedLogId}
+                onSelectLog={handleSelectLog}
+                onNewLog={handleNewLog}
+                onLogsChange={setLogs}
+                activeTag={activeTag}
+                onTagClick={setActiveTag}
+              />
+            </div>
+
+            {/* Center pane — full screen on mobile when mobileView=detail */}
+            <div className={`${mobileView === 'detail' ? 'flex' : 'hidden'} md:flex flex-col flex-1 min-h-0 w-full`}>
+              <CenterPane
+                selectedLogId={selectedLogId}
+                composing={composing}
+                onNewLog={handleNewLog}
+                onCancelCompose={handleCancelCompose}
+                onLogCreated={handleLogCreated}
+                onLogUpdated={handleLogUpdated}
+                onToggleRightRail={handleToggleRightRail}
+                rightRailOpen={rightRailOpen}
+                onEntityClick={handleEntityClick}
+                onTagClick={setActiveTag}
+                refreshKey={logRefreshKey}
+                onBack={() => setMobileView('list')}
+              />
+            </div>
+
+            {/* Right rail — full screen on mobile when mobileView=context */}
+            <div className={`${mobileView === 'context' ? 'flex' : 'hidden'} md:flex flex-col min-h-0 w-full md:w-auto`}>
+              <RightRail
+                open={rightRailOpen || mobileView === 'context'}
+                selectedLogId={selectedLogId}
+                onClose={() => setRightRailOpen(false)}
+                entityToShow={entityToShow}
+                onSelectLog={handleSelectLog}
+                refreshKey={logRefreshKey}
+                onEntityMerged={() => setLogRefreshKey(k => k + 1)}
+                onLogChanged={() => setLogRefreshKey(k => k + 1)}
+                onBack={() => setMobileView('detail')}
+              />
+            </div>
           </>
         ) : page === 'entities' ? (
           <EntitiesPage onSelectLog={handleSelectLogFromEntity} />
@@ -131,6 +165,21 @@ export default function App() {
           <TasksPage onSelectLog={handleSelectLogFromEntity} />
         )}
       </div>
+
+      {/* Bottom nav — mobile only */}
+      <nav className="md:hidden shrink-0 flex border-t border-gray-200 bg-white">
+        {NAV_ITEMS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => { setPage(key); setMobileView('list') }}
+            className={`flex-1 py-3 text-xs font-medium transition-colors ${
+              page === key ? 'text-gray-900' : 'text-gray-400'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
     </div>
   )
 }

@@ -1,3 +1,14 @@
+// Annotation states:
+//   suggested  — LLM-detected, user has not reviewed
+//   accepted   — user confirmed this reference is real (soft confirm, no text change)
+//   corrected  — user supplied a corrected value
+//   rejected   — user dismissed this reference
+//
+// provenance:
+//   'user'     → confirmed link — user explicitly wrote [[Name]] in the log text
+//   otherwise  → suggested — LLM-detected (e.g. 'gpt-4o-mini/v2.0')
+//
+// Visual rule: isSuggested = provenance !== 'user' && status !== 'accepted'
 export interface Annotation {
   id: number
   log_id: number
@@ -8,12 +19,14 @@ export interface Annotation {
   corrected_value: string | null
   span_start: number | null
   span_end: number | null
+  provenance: string | null
 }
 
 export interface LogSummary {
   id: number
   raw_text: string
   created_at: string
+  updated_at: string | null
   source: 'text' | 'voice'
   annotation_types: string[]
   tags: string[]

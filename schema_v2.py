@@ -1,16 +1,26 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
 
 
 # All valid annotation types produced by the single-pass parser.
 ANNOTATION_TYPES = frozenset({
     "candidate_person",
     "candidate_place",
+    "candidate_pet",
+    "candidate_organization",
+    "candidate_event",
+    "candidate_thing",
+    "candidate_idea",
 })
 
 MENTION_TYPES = frozenset({
     "candidate_person",
     "candidate_place",
+    "candidate_pet",
+    "candidate_organization",
+    "candidate_event",
+    "candidate_thing",
+    "candidate_idea",
 })
 
 
@@ -22,7 +32,15 @@ class Mention(BaseModel):
     start_char / end_char are computed post-parse by resolving text_span against raw_text.
     """
     text: str                          # exact text as written in the note
-    candidate_type: str                # candidate_person | candidate_place | ...
+    candidate_type: Literal[
+        "candidate_person",
+        "candidate_place",
+        "candidate_pet",
+        "candidate_organization",
+        "candidate_event",
+        "candidate_thing",
+        "candidate_idea",
+    ]
     canonical_name_guess: str          # best guess at canonical form
     confidence: float                  # 0.0–1.0
     start_char: Optional[int] = None   # populated by _resolve_spans(), not the LLM

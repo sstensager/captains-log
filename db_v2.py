@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS Log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     raw_text    TEXT    NOT NULL,
     created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT,
     source_type TEXT    NOT NULL DEFAULT 'text',
     tags        TEXT    NOT NULL DEFAULT '[]'
 );
@@ -128,6 +129,7 @@ def _run_migrations(con: sqlite3.Connection) -> None:
         "ALTER TABLE Log ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'",
         "ALTER TABLE Task ADD COLUMN indent INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE Task ADD COLUMN section TEXT",
+        "ALTER TABLE Log ADD COLUMN updated_at TEXT",
     ]
     for sql in migrations:
         try:

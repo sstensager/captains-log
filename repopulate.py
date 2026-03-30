@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Wipe and rebuild the v2 DB from the 37 fixture notes in sample_notes.md.
+Wipe and rebuild the v2 DB from fixture notes.
 
 Usage:
-  python repopulate.py                    # full rebuild including embeddings
-  python repopulate.py --skip-embeddings  # skip embedding generation (~30s vs ~4min)
+  python repopulate.py                                      # load fixtures/sample_notes.md
+  python repopulate.py --source path/to/notes.md            # load a different file
+  python repopulate.py --skip-embeddings                    # skip embedding generation
 """
 import argparse
 import os
@@ -18,10 +19,10 @@ load_dotenv()
 
 from db_v2 import DB_PATH_V2, init_db, rebuild_fts
 from parser_v2 import parse_log
-from promote_v2 import promote_all_mentions
+from promote_v2 import extract_todos, promote_all_mentions
 
 
-def load_fixture_notes(path: str = "sample_notes.md") -> list[str]:
+def load_fixture_notes(path: str = "fixtures/demo_notes.md") -> list[str]:
     raw = Path(path).read_text()
     if "# Suggested retrieval questions" in raw:
         raw = raw[: raw.index("# Suggested retrieval questions")]
@@ -47,6 +48,10 @@ def main() -> None:
         "--skip-embeddings", action="store_true",
         help="Skip embedding generation (faster dev runs)",
     )
+    parser.add_argument(
+        "--source", default="fixtures/demo_notes.md",
+        help="Path to the notes file (default: fixtures/demo_notes.md)",
+    )
     args = parser.parse_args()
 
     # Wipe existing DB
@@ -58,12 +63,13 @@ def main() -> None:
     print(f"Initialized fresh DB: {DB_PATH_V2}\n")
 
     # Parse all fixture notes
-    notes = load_fixture_notes()
+    notes = load_fixture_notes(args.source)
     print(f"Parsing {len(notes)} fixture notes...")
     for i, text in enumerate(notes, 1):
         print(f"  [{i:02d}/{len(notes)}] ", end="", flush=True)
         log_id, result = parse_log(text, con)
-        print(f"log={log_id}  {len(result.mentions)} mentions  {len(result.annotations)} annotations")
+        todos = extract_todos(log_id, text, con)
+        print(f"log={log_id}  {len(result.mentions)} mentions  {todos['todos_created']} todos")
 
     # Rebuild FTS index
     fts_count = rebuild_fts(con)

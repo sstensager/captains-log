@@ -50,7 +50,7 @@ export default function LeftRail({
     : logs
 
   return (
-    <div className="w-[220px] shrink-0 flex flex-col h-full bg-gray-50 border-r border-gray-200">
+    <div className="w-full md:w-[220px] shrink-0 flex flex-col h-full bg-gray-50 border-r border-gray-200">
       {/* Brand header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200">
         <div>

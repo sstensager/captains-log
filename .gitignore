@@ -6,6 +6,9 @@ __pycache__/
 *.pyc
 .DS_Store
 
+# Claude instructions — local only
+CLAUDE.md
+
 # Personal data — never publish
 config.py
 sample_notes.md

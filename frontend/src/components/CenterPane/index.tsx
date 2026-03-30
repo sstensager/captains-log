@@ -1,21 +1,178 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import EmptyState from './EmptyState'
-import { fetchLog, createLog, fetchTasks, patchTask, updateLog, patchAnnotation } from '../../api'
-import type { Annotation, LogDetail, TaskOut } from '../../types'
+import { fetchLog, createLog, fetchTasks, patchTask, updateLog, patchAnnotation, promoteAnnotation, relinkAnnotation, fetchEntities } from '../../api'
+import type { Annotation, EntitySummary, LogDetail, TaskOut } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate, shortTime } from '../../utils/time'
 
-const ENTITY_TYPES = new Set(['person', 'place'])
-const TODO_LINE_RE = /^\s*\[[ xX]?\]\s*(.*)/
+const ENTITY_TYPES = new Set(['person', 'place', 'pet', 'organization', 'event', 'thing', 'idea'])
+const TODO_LINE_RE = /^\s*(?:[-*]\s+)?\[[ xX]?\]\s*(.*)/
 const BULLET_LINE_RE = /^(\s*)([-*])\s+(.*)/
 
 // ── Line-by-line body renderer ────────────────────────────────────────────────
+
+// ── Entity mark with action menu ──────────────────────────────────────────────
+
+function EntityMark({
+  displayText, entityName, type, annotationId, isLlm,
+  onEntityClick, onReject, onPromote, onRelink,
+}: {
+  displayText: string
+  entityName: string
+  type: string
+  annotationId: number
+  isLlm: boolean
+  onEntityClick: (name: string) => void
+  onReject: (id: number) => void
+  onPromote: (id: number) => void
+  onRelink: (id: number, targetName: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [relinking, setRelinking] = useState(false)
+  const [relinkQuery, setRelinkQuery] = useState('')
+  const [allEntities, setAllEntities] = useState<EntitySummary[]>([])
+  const ref = useRef<HTMLSpanElement>(null)
+  const relinkInputRef = useRef<HTMLInputElement>(null)
+  const c = colorFor(type)
+
+  useEffect(() => {
+    if (!open) { setRelinking(false); setRelinkQuery('') }
+  }, [open])
+
+  useEffect(() => {
+    if (relinking) {
+      fetchEntities().then(setAllEntities)
+      setTimeout(() => relinkInputRef.current?.focus(), 0)
+    }
+  }, [relinking])
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  const filteredRelink = relinkQuery.trim()
+    ? allEntities
+        .filter(e => e.name.toLowerCase().includes(relinkQuery.toLowerCase()) && e.name.toLowerCase() !== entityName.toLowerCase())
+        .slice(0, 6)
+    : []
+
+  return (
+    <span ref={ref} className="relative inline group/mark">
+      <mark
+        onClick={() => { if (!open && entityName) onEntityClick(entityName) }}
+        style={{
+          backgroundColor: c.bg,
+          borderBottom: `2px ${isLlm ? 'dashed' : 'solid'} ${c.border}`,
+          cursor: entityName ? 'pointer' : 'default',
+          borderRadius: '2px',
+          padding: '0 1px',
+          fontStyle: 'inherit',
+        }}
+      >
+        {displayText}
+      </mark>
+      {/* Chevron trigger */}
+      <button
+        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
+        className="absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-gray-400 text-white text-[10px] leading-none hidden group-hover/mark:flex items-center justify-center hover:bg-gray-600 transition-colors z-10"
+        title="Actions"
+      >
+        ▾
+      </button>
+      {/* Action menu */}
+      {open && (
+        <span
+          className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 flex flex-col py-1 min-w-max"
+          onMouseDown={e => e.nativeEvent.stopImmediatePropagation()}
+        >
+          {relinking ? (
+            <>
+              <div className="px-3 py-1.5 border-b border-gray-100">
+                <input
+                  ref={relinkInputRef}
+                  value={relinkQuery}
+                  onChange={e => setRelinkQuery(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') { e.stopPropagation(); setOpen(false) }
+                    if (e.key === 'Enter' && relinkQuery.trim()) {
+                      onRelink(annotationId, relinkQuery.trim()); setOpen(false)
+                    }
+                  }}
+                  placeholder="Search or create…"
+                  className="text-xs w-40 outline-none bg-transparent text-gray-700 placeholder-gray-300"
+                />
+              </div>
+              {filteredRelink.map(e => {
+                const ec = colorFor(e.type)
+                return (
+                  <button
+                    key={e.id}
+                    onMouseDown={ev => { ev.preventDefault(); onRelink(annotationId, e.name); setOpen(false) }}
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: ec.dot }} />
+                    {e.name}
+                  </button>
+                )
+              })}
+              {relinkQuery.trim() && (
+                <button
+                  onMouseDown={ev => { ev.preventDefault(); onRelink(annotationId, relinkQuery.trim()); setOpen(false) }}
+                  className={`px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-gray-400 whitespace-nowrap italic ${filteredRelink.length > 0 ? 'border-t border-gray-100' : ''}`}
+                >
+                  Create "{relinkQuery.trim()}"
+                </button>
+              )}
+              <button
+                onMouseDown={e => { e.preventDefault(); setRelinking(false) }}
+                className="px-3 py-1.5 text-xs text-left text-gray-300 hover:text-gray-500 border-t border-gray-100"
+              >
+                ← Back
+              </button>
+            </>
+          ) : (
+            <>
+              {isLlm && (
+                <button
+                  onMouseDown={e => { e.preventDefault(); onPromote(annotationId); setOpen(false) }}
+                  className="px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+                >
+                  Link as <span className="font-mono text-blue-600">[[{displayText}]]</span>
+                </button>
+              )}
+              <button
+                onMouseDown={e => { e.preventDefault(); setRelinking(true) }}
+                className="px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+              >
+                Different entity…
+              </button>
+              <button
+                onMouseDown={e => { e.preventDefault(); onReject(annotationId); setOpen(false) }}
+                className="px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-red-500 whitespace-nowrap"
+              >
+                Remove reference
+              </button>
+            </>
+          )}
+        </span>
+      )}
+    </span>
+  )
+}
 
 function renderLineHighlights(
   line: string,
   lineStart: number,
   annotations: Annotation[],
   onEntityClick: (name: string) => void,
+  onRejectAnnotation: (id: number) => void,
+  onPromoteAnnotation: (id: number) => void,
+  onRelinkAnnotation: (id: number, targetName: string) => void,
 ): React.ReactNode {
   const spans = annotations
     .filter(a =>
@@ -39,23 +196,25 @@ function renderLineHighlights(
     const e = ann.span_end!
     if (s < cursor) continue
     if (s > cursor) nodes.push(line.slice(cursor, s))
-    const c = colorFor(ann.type)
     const entityName = ann.corrected_value ?? ann.value ?? ''
+    const rawSpan = line.slice(s, e)
+    const isUserLink = rawSpan.startsWith('[[') && rawSpan.endsWith(']]')
+    const isSoftLink = rawSpan.startsWith('{') && rawSpan.endsWith('}')
+    const displayText = isUserLink ? rawSpan.slice(2, -2) : isSoftLink ? rawSpan.slice(1, -1) : rawSpan
+    const isLlm = !isUserLink && ann.provenance !== 'user' && ann.status !== 'accepted'
     nodes.push(
-      <mark
+      <EntityMark
         key={ann.id}
-        onClick={entityName ? () => onEntityClick(entityName) : undefined}
-        style={{
-          backgroundColor: c.bg,
-          borderBottom: `2px solid ${c.border}`,
-          cursor: entityName ? 'pointer' : 'default',
-          borderRadius: '2px',
-          padding: '0 1px',
-          fontStyle: 'inherit',
-        }}
-      >
-        {line.slice(s, e)}
-      </mark>
+        displayText={displayText}
+        entityName={entityName}
+        type={ann.type}
+        annotationId={ann.id}
+        isLlm={isLlm}
+        onEntityClick={onEntityClick}
+        onReject={onRejectAnnotation}
+        onPromote={onPromoteAnnotation}
+        onRelink={onRelinkAnnotation}
+      />
     )
     cursor = e
   }
@@ -69,6 +228,9 @@ function renderBody(
   tasks: TaskOut[],
   onEntityClick: (name: string) => void,
   onToggleTodo: (task: TaskOut) => void,
+  onRejectAnnotation: (id: number) => void,
+  onPromoteAnnotation: (id: number) => void,
+  onRelinkAnnotation: (id: number, targetName: string) => void,
 ): React.ReactNode {
   const lines = rawText.split('\n')
   let offset = 0
@@ -112,7 +274,7 @@ function renderBody(
         <div key={i} className="flex items-baseline gap-2 leading-relaxed" style={{ paddingLeft: `${level * 1.25}rem` }}>
           <span className="text-gray-400 shrink-0 select-none text-sm">•</span>
           <span className="text-base text-gray-800">
-            {renderLineHighlights(content, contentStart, annotations, onEntityClick)}
+            {renderLineHighlights(content, contentStart, annotations, onEntityClick, onRejectAnnotation, onPromoteAnnotation, onRelinkAnnotation)}
           </span>
         </div>
       )
@@ -120,7 +282,7 @@ function renderBody(
       nodes.push(
         <div key={i} className="text-base text-gray-800 leading-relaxed min-h-[1.5em]">
           {line
-            ? renderLineHighlights(line, lineStart, annotations, onEntityClick)
+            ? renderLineHighlights(line, lineStart, annotations, onEntityClick, onRejectAnnotation, onPromoteAnnotation, onRelinkAnnotation)
             : <>&nbsp;</>}
         </div>
       )
@@ -141,27 +303,38 @@ interface Props {
   rightRailOpen: boolean
   onEntityClick: (name: string) => void
   onTagClick: (tag: string) => void
+  refreshKey?: number
+  onBack?: () => void
 }
 
-// ── Smart textarea for editing ────────────────────────────────────────────────
+// ── Smart textarea with [[ entity autocomplete ────────────────────────────────
 
-function EditView({
-  initialText,
+function SmartTextarea({
+  value,
+  onChange,
   onSave,
   onCancel,
+  placeholder,
+  textareaClassName,
 }: {
-  initialText: string
-  onSave: (text: string) => void
+  value: string
+  onChange: (v: string) => void
+  onSave: () => void
   onCancel: () => void
+  placeholder?: string
+  textareaClassName?: string
 }) {
-  const [text, setText] = useState(initialText)
-  const [saving, setSaving] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
   const selAfter = useRef<{ start: number; end: number } | null>(null)
+  const [entities, setEntities] = useState<EntitySummary[]>([])
+  const [linkQuery, setLinkQuery] = useState<string | null>(null)
+  const [linkStart, setLinkStart] = useState(0)
+  const [hlIdx, setHlIdx] = useState(0)
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null)
 
   useEffect(() => { ref.current?.focus() }, [])
+  useEffect(() => { fetchEntities().then(setEntities) }, [])
 
-  // Apply cursor position after React re-renders from key handling
   useLayoutEffect(() => {
     if (selAfter.current && ref.current) {
       ref.current.selectionStart = selAfter.current.start
@@ -170,61 +343,339 @@ function EditView({
     }
   })
 
+  const filtered = useMemo(() => {
+    if (linkQuery === null) return []
+    return entities
+      .filter(e => e.name.toLowerCase().includes(linkQuery.toLowerCase()))
+      .slice(0, 8)
+  }, [linkQuery, entities])
+
+  const detectLink = (val: string, pos: number) => {
+    const before = val.slice(0, pos)
+    const lastOpen = before.lastIndexOf('[[')
+    if (lastOpen !== -1 && !before.slice(lastOpen).includes(']]')) {
+      setLinkQuery(before.slice(lastOpen + 2))
+      setLinkStart(lastOpen)
+      setHlIdx(0)
+      if (ref.current) {
+        const r = ref.current.getBoundingClientRect()
+        const linesAbove = val.slice(0, pos).split('\n').length - 1
+        const lineHeight = parseFloat(getComputedStyle(ref.current).lineHeight) || 29
+        const cursorTop = r.top + linesAbove * lineHeight + lineHeight + 4 - ref.current.scrollTop
+        // Flip above cursor if too close to viewport bottom
+        const dropHeight = 280
+        const top = cursorTop + dropHeight > window.innerHeight
+          ? cursorTop - lineHeight - dropHeight - 4
+          : cursorTop
+        setDropdownPos({ top, left: r.left })
+      }
+    } else {
+      setLinkQuery(null)
+      setDropdownPos(null)
+    }
+  }
+
+  const insertLink = (name: string) => {
+    const pos = ref.current?.selectionStart ?? value.length
+    const newVal = value.slice(0, linkStart) + '[[' + name + ']]' + value.slice(pos)
+    onChange(newVal)
+    setLinkQuery(null)
+    const newPos = linkStart + name.length + 4
+    selAfter.current = { start: newPos, end: newPos }
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onChange(e.target.value)
+    detectLink(e.target.value, e.target.selectionStart)
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget
-    const { selectionStart: ss, selectionEnd: se, value } = ta
+    const { selectionStart: ss, selectionEnd: se, value: v } = ta
 
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault()
-      handleSave()
-      return
+    // ── Dropdown navigation ──
+    if (linkQuery !== null) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setHlIdx(i => Math.min(i + 1, filtered.length - 1)); return }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setHlIdx(i => Math.max(i - 1, 0)); return }
+      if (e.key === 'Escape')    { e.preventDefault(); setLinkQuery(null); return }
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        if (filtered.length > 0) insertLink(filtered[hlIdx].name)
+        else if (linkQuery.trim()) insertLink(linkQuery.trim())
+        else setLinkQuery(null)
+        return
+      }
+      if (e.key === 'Tab' && filtered.length > 0) { e.preventDefault(); insertLink(filtered[hlIdx].name); return }
     }
+
+    // ── ⌘↵ save / Esc cancel ──
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); onSave(); return }
     if (e.key === 'Escape') { e.preventDefault(); onCancel(); return }
 
+    // ── [ with selection → wrap as [[...]] ──
+    if (e.key === '[' && ss !== se) {
+      e.preventDefault()
+      const selected = v.slice(ss, se)
+      const isWholeSoftLink = selected.startsWith('{') && selected.endsWith('}')
+      const isInsideSoftLink = !isWholeSoftLink && ss > 0 && se < v.length && v[ss - 1] === '{' && v[se] === '}'
+      let newVal: string, newPos: number
+      if (isWholeSoftLink) {
+        const inner = selected.slice(1, -1)
+        newVal = v.slice(0, ss) + '[[' + inner + ']]' + v.slice(se)
+        newPos = ss + inner.length + 4
+      } else if (isInsideSoftLink) {
+        // Replace the surrounding { } with [[ ]]
+        newVal = v.slice(0, ss - 1) + '[[' + selected + ']]' + v.slice(se + 1)
+        newPos = (ss - 1) + selected.length + 4
+      } else {
+        newVal = v.slice(0, ss) + '[[' + selected + ']]' + v.slice(se)
+        newPos = ss + selected.length + 4
+      }
+      onChange(newVal)
+      setLinkQuery(null)
+      selAfter.current = { start: newPos, end: newPos }
+      return
+    }
+
+    // ── Tab indent/dedent ──
     if (e.key === 'Tab') {
       e.preventDefault()
-      const lineStart = value.lastIndexOf('\n', ss - 1) + 1
+      const lineStart = v.lastIndexOf('\n', ss - 1) + 1
       if (!e.shiftKey) {
-        setText(value.slice(0, lineStart) + '  ' + value.slice(lineStart))
+        onChange(v.slice(0, lineStart) + '  ' + v.slice(lineStart))
         selAfter.current = { start: ss + 2, end: se + 2 }
       } else {
-        const spaces = value.slice(lineStart).match(/^ {1,2}/)
+        const spaces = v.slice(lineStart).match(/^ {1,2}/)
         if (spaces) {
           const n = spaces[0].length
-          setText(value.slice(0, lineStart) + value.slice(lineStart + n))
+          onChange(v.slice(0, lineStart) + v.slice(lineStart + n))
           selAfter.current = { start: Math.max(lineStart, ss - n), end: Math.max(lineStart, se - n) }
         }
       }
       return
     }
 
+    // ── Enter continuation (bullet / todo) ──
     if (e.key === 'Enter') {
-      const lineStart = value.lastIndexOf('\n', ss - 1) + 1
-      const line = value.slice(lineStart, ss)
+      const lineStart = v.lastIndexOf('\n', ss - 1) + 1
+      const line = v.slice(lineStart, ss)
       const m = line.match(/^(\s*)([-*]|\[[ xX]?\])\s/)
       if (m) {
         e.preventDefault()
         const [, indent, marker] = m
         const lineContent = line.slice(m[0].length).trim()
         if (!lineContent) {
-          // empty bullet/todo — break out
-          const next = value.slice(0, lineStart) + '\n' + value.slice(se)
-          setText(next)
+          onChange(v.slice(0, lineStart) + '\n' + v.slice(se))
           selAfter.current = { start: lineStart + 1, end: lineStart + 1 }
         } else {
           const prefix = marker.startsWith('[') ? `${indent}[ ] ` : `${indent}${marker} `
           const insertion = '\n' + prefix
-          setText(value.slice(0, ss) + insertion + value.slice(se))
+          onChange(v.slice(0, ss) + insertion + v.slice(se))
           selAfter.current = { start: ss + insertion.length, end: ss + insertion.length }
         }
       }
     }
   }
 
-  const handleSave = async () => {
+  return (
+    <div className="relative flex-1 flex flex-col min-h-0">
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        className={textareaClassName ?? 'flex-1 w-full resize-none outline-none text-base text-gray-800 leading-[1.8] placeholder-gray-300 bg-transparent'}
+      />
+      {linkQuery !== null && dropdownPos && (
+        <div
+          className="fixed w-72 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-50"
+          style={{ top: dropdownPos.top, left: dropdownPos.left }}
+        >
+          <div className="px-3 py-1.5 border-b border-gray-100">
+            <span className="text-xs text-gray-400 font-mono">{`[[${linkQuery}`}</span>
+            <span className="text-xs text-gray-300 ml-1">↑↓ navigate · ↵ select · Esc dismiss</span>
+          </div>
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-gray-400 italic">
+              {linkQuery.trim() ? `Create new: [[${linkQuery.trim()}]]` : 'Type to search…'}
+            </div>
+          ) : filtered.map((e, i) => {
+            const c = colorFor(e.type)
+            return (
+              <button
+                key={e.id}
+                onMouseDown={ev => { ev.preventDefault(); insertLink(e.name) }}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors ${i === hlIdx ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
+                <span className="flex-1 truncate text-gray-800">{e.name}</span>
+                <span className="text-xs text-gray-400 shrink-0">{e.type}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Edit-mode annotation chip & bar ───────────────────────────────────────────
+
+function EditAnnotationChip({
+  name, type, text, onLink, onDismiss,
+}: {
+  name: string
+  type: string
+  text: string
+  onLink: (newText: string) => void
+  onDismiss: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+  const c = colorFor(type)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  const handleLink = () => {
+    // Prefer upgrading a {Name} marker if one exists
+    const softRe = new RegExp('\\{' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\}', 'i')
+    const softMatch = softRe.exec(text)
+    if (softMatch) {
+      onLink(text.slice(0, softMatch.index) + '[[' + name + ']]' + text.slice(softMatch.index + softMatch[0].length))
+      setOpen(false)
+      return
+    }
+    // Fall back to wrapping first unbracketed plain occurrence
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(escaped, 'gi')
+    let match: RegExpExecArray | null
+    while ((match = re.exec(text)) !== null) {
+      const idx = match.index
+      const before = text.slice(0, idx)
+      const after = text.slice(idx + match[0].length)
+      if (!before.endsWith('[[')) {
+        onLink(before + '[[' + match[0] + ']]' + after)
+        setOpen(false)
+        return
+      }
+    }
+    setOpen(false)
+  }
+
+  return (
+    <span ref={ref} className="relative inline-flex">
+      <button
+        onMouseDown={e => { e.preventDefault(); setOpen(o => !o) }}
+        className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border cursor-pointer hover:opacity-80 transition-opacity"
+        style={{ backgroundColor: c.bg, borderColor: c.border, borderStyle: 'dashed', color: c.text }}
+        title="Actions"
+      >
+        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
+        {name}
+        <span className="opacity-50 text-[9px] leading-none">▾</span>
+      </button>
+      {open && (
+        <span className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 flex flex-col py-1 min-w-max">
+          <button
+            onMouseDown={e => { e.preventDefault(); handleLink() }}
+            className="px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+          >
+            Link as <span className="font-mono text-blue-600">[[{name}]]</span>
+          </button>
+          <button
+            onMouseDown={e => { e.preventDefault(); onDismiss(); setOpen(false) }}
+            className="px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-red-500 whitespace-nowrap"
+          >
+            Remove reference
+          </button>
+        </span>
+      )}
+    </span>
+  )
+}
+
+function EditAnnotationBar({
+  annotations,
+  dismissedIds,
+  text,
+  onTextChange,
+  onDismiss,
+}: {
+  annotations: Annotation[]
+  dismissedIds: Set<number>
+  text: string
+  onTextChange: (t: string) => void
+  onDismiss: (id: number) => void
+}) {
+  const chips = (() => {
+    const groups = new Map<string, { type: string; id: number }>()
+    for (const a of annotations) {
+      if (a.status === 'rejected' || a.status === 'accepted' || dismissedIds.has(a.id) || !ENTITY_TYPES.has(a.type) || a.provenance === 'user') continue
+      const name = a.corrected_value ?? a.value ?? ''
+      if (!name || groups.has(name)) continue
+      groups.set(name, { type: a.type, id: a.id })
+    }
+    return Array.from(groups.entries()).map(([name, { type, id }]) => ({ name, type, id }))
+  })()
+
+  if (chips.length === 0) return null
+
+  return (
+    <div className="flex items-center gap-2 px-6 py-2 border-b border-amber-100 bg-amber-50/40">
+      <span className="text-xs text-gray-400 shrink-0">Detected:</span>
+      <div className="flex flex-wrap gap-1.5">
+        {chips.map(({ name, type, id }) => (
+          <EditAnnotationChip
+            key={id}
+            name={name}
+            type={type}
+            text={text}
+            onLink={onTextChange}
+            onDismiss={() => onDismiss(id)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Edit view ─────────────────────────────────────────────────────────────────
+
+function EditView({
+  initialText,
+  annotations,
+  onSave,
+  onCancel,
+}: {
+  initialText: string
+  annotations?: Annotation[]
+  onSave: (text: string) => void
+  onCancel: () => void
+}) {
+  const [text, setText] = useState(initialText)
+  const [saving, setSaving] = useState(false)
+  const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set())
+
+  const handleSave = () => {
     if (!text.trim() || saving) return
     setSaving(true)
     onSave(text.trim())
+  }
+
+  const handleDismiss = (id: number) => {
+    setDismissedIds(prev => new Set([...prev, id]))
+    patchAnnotation(id, 'rejected').catch(() => {
+      // revert on failure
+      setDismissedIds(prev => { const s = new Set(prev); s.delete(id); return s })
+    })
   }
 
   return (
@@ -232,9 +683,7 @@ function EditView({
       <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white">
         <span className="text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
         <div className="flex gap-2">
-          <button onClick={onCancel} className="text-sm text-gray-400 hover:text-gray-700 transition-colors">
-            Cancel
-          </button>
+          <button onClick={onCancel} className="text-sm text-gray-400 hover:text-gray-700 transition-colors">Cancel</button>
           <button
             onClick={handleSave}
             disabled={!text.trim() || saving}
@@ -244,13 +693,21 @@ function EditView({
           </button>
         </div>
       </div>
-      <div className="flex-1 p-8">
-        <textarea
-          ref={ref}
+      {annotations && annotations.length > 0 && (
+        <EditAnnotationBar
+          annotations={annotations}
+          dismissedIds={dismissedIds}
+          text={text}
+          onTextChange={setText}
+          onDismiss={handleDismiss}
+        />
+      )}
+      <div className="flex-1 flex flex-col p-8 min-h-0">
+        <SmartTextarea
           value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="w-full h-full resize-none outline-none text-base text-gray-800 leading-[1.8] bg-transparent font-mono text-sm"
+          onChange={setText}
+          onSave={handleSave}
+          onCancel={onCancel}
         />
       </div>
     </div>
@@ -268,9 +725,6 @@ function ComposeView({
 }) {
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const ref = useRef<HTMLTextAreaElement>(null)
-
-  useEffect(() => { ref.current?.focus() }, [])
 
   const submit = async () => {
     if (!text.trim() || submitting) return
@@ -283,76 +737,19 @@ function ComposeView({
     }
   }
 
-  const selAfter = useRef<{ start: number; end: number } | null>(null)
-
-  useLayoutEffect(() => {
-    if (selAfter.current && ref.current) {
-      ref.current.selectionStart = selAfter.current.start
-      ref.current.selectionEnd = selAfter.current.end
-      selAfter.current = null
-    }
-  })
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { submit(); return }
-    if (e.key === 'Escape') { onCancel(); return }
-
-    const ta = e.currentTarget
-    const { selectionStart: ss, selectionEnd: se, value } = ta
-
-    if (e.key === 'Tab') {
-      e.preventDefault()
-      const lineStart = value.lastIndexOf('\n', ss - 1) + 1
-      if (!e.shiftKey) {
-        setText(value.slice(0, lineStart) + '  ' + value.slice(lineStart))
-        selAfter.current = { start: ss + 2, end: se + 2 }
-      } else {
-        const spaces = value.slice(lineStart).match(/^ {1,2}/)
-        if (spaces) {
-          const n = spaces[0].length
-          setText(value.slice(0, lineStart) + value.slice(lineStart + n))
-          selAfter.current = { start: Math.max(lineStart, ss - n), end: Math.max(lineStart, se - n) }
-        }
-      }
-      return
-    }
-
-    if (e.key === 'Enter') {
-      const lineStart = value.lastIndexOf('\n', ss - 1) + 1
-      const line = value.slice(lineStart, ss)
-      const m = line.match(/^(\s*)([-*]|\[[ xX]?\])\s/)
-      if (m) {
-        e.preventDefault()
-        const [, indent, marker] = m
-        const lineContent = line.slice(m[0].length).trim()
-        if (!lineContent) {
-          const next = value.slice(0, lineStart) + '\n' + value.slice(se)
-          setText(next)
-          selAfter.current = { start: lineStart + 1, end: lineStart + 1 }
-        } else {
-          const prefix = marker.startsWith('[') ? `${indent}[ ] ` : `${indent}${marker} `
-          const insertion = '\n' + prefix
-          setText(value.slice(0, ss) + insertion + value.slice(se))
-          selAfter.current = { start: ss + insertion.length, end: ss + insertion.length }
-        }
-      }
-    }
-  }
-
   return (
     <div className="flex-1 flex flex-col min-w-0">
       <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white">
         <span className="text-sm text-gray-400">{relativeDate(new Date().toISOString())}</span>
         <span className="text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
       </div>
-      <div className="flex-1 flex flex-col p-8">
-        <textarea
-          ref={ref}
+      <div className="flex-1 flex flex-col p-8 min-h-0">
+        <SmartTextarea
           value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={onKeyDown}
+          onChange={setText}
+          onSave={submit}
+          onCancel={onCancel}
           placeholder="What's on your mind?"
-          className="flex-1 w-full resize-none outline-none text-base text-gray-800 leading-[1.8] placeholder-gray-300 bg-transparent"
         />
         <div className="flex items-center justify-between pt-4 border-t border-gray-100">
           <button
@@ -392,18 +789,24 @@ function LogSkeleton() {
 // ── Chip ──────────────────────────────────────────────────────────────────────
 
 function Chip({
-  type, value, onClick, onReject,
+  type, value, onClick, onReject, isLlm,
 }: {
   type: string
   value: string
   onClick: () => void
   onReject?: () => void
+  isLlm?: boolean
 }) {
   const c = colorFor(type)
   return (
     <span
       className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border"
-      style={{ backgroundColor: c.bg, borderColor: c.border, color: c.text }}
+      style={{
+        backgroundColor: c.bg,
+        borderColor: c.border,
+        borderStyle: isLlm ? 'dashed' : 'solid',
+        color: c.text,
+      }}
     >
       <button onClick={onClick} className="flex items-center gap-1 hover:opacity-75 transition-opacity">
         <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.dot }} />
@@ -435,12 +838,15 @@ export default function CenterPane({
   rightRailOpen,
   onEntityClick,
   onTagClick,
+  refreshKey,
+  onBack,
 }: Props) {
   const [log, setLog] = useState<LogDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [parsing, setParsing] = useState(false)
   const [tasks, setTasks] = useState<TaskOut[]>([])
   const [editing, setEditing] = useState(false)
+  const [pendingReject, setPendingReject] = useState<{ name: string; ids: number[] } | null>(null)
 
   useEffect(() => {
     setEditing(false)
@@ -449,7 +855,7 @@ export default function CenterPane({
     Promise.all([fetchLog(selectedLogId), fetchTasks(selectedLogId)]).then(([data, t]) => {
       setLog(data); setLoading(false); setTasks(t)
     })
-  }, [selectedLogId])
+  }, [selectedLogId, refreshKey])
 
   // Poll for annotations while parse is in-flight (only for recently created logs)
   useEffect(() => {
@@ -481,6 +887,7 @@ export default function CenterPane({
     return (
       <EditView
         initialText={log.raw_text}
+        annotations={log.annotations}
         onCancel={() => setEditing(false)}
         onSave={async (text) => {
           const updated = await updateLog(log.id, text)
@@ -507,21 +914,54 @@ export default function CenterPane({
     )
   }
 
-  const entityChips = log?.annotations.filter(
-    a => a.status !== 'rejected' && ENTITY_TYPES.has(a.type)
-  ) ?? []
+  // Deduplicate by name — one chip per unique entity name
+  const entityChips = (() => {
+    const groups = new Map<string, { type: string; annotations: Annotation[]; hasUserLink: boolean }>()
+    for (const a of log?.annotations ?? []) {
+      if (a.status === 'rejected' || !ENTITY_TYPES.has(a.type)) continue
+      const name = a.corrected_value ?? a.value ?? ''
+      if (!name) continue
+      if (!groups.has(name)) groups.set(name, { type: a.type, annotations: [], hasUserLink: false })
+      const g = groups.get(name)!
+      g.annotations.push(a)
+      if (a.provenance === 'user' || a.status === 'accepted') g.hasUserLink = true
+    }
+    return Array.from(groups.entries()).map(([name, { type, annotations, hasUserLink }]) => ({
+      name, type, annotations, isLlm: !hasUserLink,
+    }))
+  })()
+
+  const rejectAnnotations = (ids: number[]) => {
+    Promise.all(ids.map(id => patchAnnotation(id, 'rejected'))).then(() => {
+      setLog(prev => prev ? {
+        ...prev,
+        annotations: prev.annotations.map(ann =>
+          ids.includes(ann.id) ? { ...ann, status: 'rejected' } : ann
+        ),
+      } : null)
+      setPendingReject(null)
+    })
+  }
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
       {/* TopBar */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white">
-        <div>
+      <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200 bg-white">
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="md:hidden text-gray-400 hover:text-gray-700 text-sm flex items-center gap-1"
+            >
+              ‹ Back
+            </button>
+          )}
           {log && (
             <>
               <span className="text-sm font-medium text-gray-700">
                 {relativeDate(log.created_at)}
               </span>
-              <span className="text-sm text-gray-400 ml-2">
+              <span className="text-sm text-gray-400">
                 {shortTime(log.created_at)}
               </span>
             </>
@@ -567,32 +1007,51 @@ export default function CenterPane({
                     setTasks(prev => prev.map(t => t.id === updated.id ? updated : t))
                   )
                 },
+                (id) => rejectAnnotations([id]),
+                (id) => { promoteAnnotation(id).then(setLog) },
+                (id, targetName) => { relinkAnnotation(id, targetName).then(setLog) },
               )}
             </div>
 
             {entityChips.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-100">
-                {entityChips.map(a => {
-                  const val = a.corrected_value ?? a.value ?? ''
-                  return val ? (
+              <div className="pt-4 border-t border-gray-100 space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {entityChips.map(({ name, type, annotations, isLlm }) => (
                     <Chip
-                      key={a.id}
-                      type={a.type}
-                      value={val}
-                      onClick={() => onEntityClick(val)}
+                      key={name}
+                      type={type}
+                      value={name}
+                      isLlm={isLlm}
+                      onClick={() => onEntityClick(name)}
                       onReject={() => {
-                        patchAnnotation(a.id, 'rejected').then(() => {
-                          setLog(prev => prev ? {
-                            ...prev,
-                            annotations: prev.annotations.map(ann =>
-                              ann.id === a.id ? { ...ann, status: 'rejected' } : ann
-                            ),
-                          } : null)
-                        })
+                        if (annotations.length > 1) {
+                          setPendingReject({ name, ids: annotations.map(a => a.id) })
+                        } else {
+                          rejectAnnotations([annotations[0].id])
+                        }
                       }}
                     />
-                  ) : null
-                })}
+                  ))}
+                </div>
+                {pendingReject && (
+                  <div className="flex items-center gap-2 text-xs text-gray-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                    <span className="flex-1">
+                      <span className="font-medium">{pendingReject.name}</span> appears {pendingReject.ids.length} times in this note. Remove all references?
+                    </span>
+                    <button
+                      onClick={() => rejectAnnotations(pendingReject.ids)}
+                      className="text-red-600 hover:text-red-800 font-medium shrink-0"
+                    >
+                      Remove all
+                    </button>
+                    <button
+                      onClick={() => setPendingReject(null)}
+                      className="text-gray-400 hover:text-gray-700 shrink-0"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

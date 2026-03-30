@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchEntities, fetchEntity } from '../../api'
+import { fetchEntities, fetchEntity, createEntity } from '../../api'
 import type { EntityDetail, EntitySummary } from '../../types'
 import { colorFor } from '../../colors'
 import EntityDetailView from '../EntityDetail'
+
+const ENTITY_TYPES = ['person', 'place', 'pet', 'organization', 'event', 'thing', 'idea']
 
 export default function EntitiesPage({
   onSelectLog,
@@ -12,8 +14,14 @@ export default function EntitiesPage({
   const [entities, setEntities] = useState<EntitySummary[]>([])
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<EntityDetail | null>(null)
-  const [typeFilter, setTypeFilter] = useState<'all' | 'person' | 'place'>('all')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
   const listRef = useRef<HTMLDivElement>(null)
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newType, setNewType] = useState('person')
+  const [saving, setSaving] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const newNameRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchEntities().then(setEntities)
@@ -34,34 +42,116 @@ export default function EntitiesPage({
     fetchEntity(e.name).then(setSelected)
   }
 
+  const handleCreate = async () => {
+    const name = newName.trim()
+    if (!name) return
+    setSaving(true)
+    setCreateError(null)
+    try {
+      const entity = await createEntity(name, newType)
+      setEntities(prev => [...prev, { id: entity.id, name: entity.name, type: entity.type, status: entity.status, ref_count: 0 }])
+      setSelected(entity)
+      setCreating(false)
+      setNewName('')
+      setNewType('person')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to create entity'
+      setCreateError(msg.includes('409') ? 'An entity with that name already exists.' : msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  useEffect(() => {
+    if (creating) setTimeout(() => newNameRef.current?.focus(), 0)
+  }, [creating])
+
   return (
     <div className="flex flex-1 min-h-0">
       {/* List panel */}
       <div className="w-72 shrink-0 flex flex-col border-r border-gray-200 bg-white">
         {/* Search + filter */}
         <div className="px-3 pt-3 pb-2 border-b border-gray-100 space-y-2">
-          <input
-            autoFocus
-            type="text"
-            placeholder="Search people & places…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            className="w-full text-sm px-3 py-1.5 rounded border border-gray-200 outline-none focus:border-gray-400 bg-gray-50"
-          />
-          <div className="flex gap-1">
-            {(['all', 'person', 'place'] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => setTypeFilter(t)}
-                className={`text-xs px-2.5 py-1 rounded border transition-colors ${
-                  typeFilter === t
-                    ? 'bg-gray-900 text-white border-gray-900'
-                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
-                }`}
-              >
-                {t === 'all' ? 'All' : t === 'person' ? 'People' : 'Places'}
-              </button>
-            ))}
+          <div className="flex gap-1.5">
+            <input
+              autoFocus={!creating}
+              type="text"
+              placeholder="Search…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              className="flex-1 text-sm px-3 py-1.5 rounded border border-gray-200 outline-none focus:border-gray-400 bg-gray-50"
+            />
+            <button
+              onClick={() => { setCreating(c => !c); setCreateError(null) }}
+              className={`text-xs px-2.5 py-1 rounded border transition-colors ${creating ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}
+              title="New entity"
+            >
+              + New
+            </button>
+          </div>
+
+          {creating && (
+            <div className="space-y-1.5 pb-1">
+              <input
+                ref={newNameRef}
+                type="text"
+                placeholder="Name…"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleCreate()
+                  if (e.key === 'Escape') { setCreating(false); setNewName('') }
+                }}
+                className="w-full text-sm px-2.5 py-1.5 rounded border border-gray-200 outline-none focus:border-gray-400 bg-white"
+              />
+              <div className="flex gap-1.5">
+                <select
+                  value={newType}
+                  onChange={e => setNewType(e.target.value)}
+                  className="flex-1 text-xs px-2 py-1.5 rounded border border-gray-200 outline-none focus:border-gray-400 bg-white"
+                >
+                  {ENTITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <button
+                  onClick={handleCreate}
+                  disabled={saving || !newName.trim()}
+                  className="text-xs px-2.5 py-1 bg-gray-900 text-white rounded disabled:opacity-40"
+                >
+                  {saving ? 'Adding…' : 'Add'}
+                </button>
+              </div>
+              {createError && <p className="text-xs text-red-500">{createError}</p>}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-1">
+            <button
+              onClick={() => setTypeFilter('all')}
+              className={`text-xs px-2.5 py-1 rounded border transition-colors ${
+                typeFilter === 'all'
+                  ? 'bg-gray-900 text-white border-gray-900'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              All
+            </button>
+            {['person', 'place', 'pet', 'organization', 'event', 'thing', 'idea'].map(t => {
+              const c = colorFor(t)
+              const active = typeFilter === t
+              return (
+                <button
+                  key={t}
+                  onClick={() => setTypeFilter(t)}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-opacity hover:opacity-75"
+                  style={active
+                    ? { backgroundColor: '#111827', borderColor: '#111827', color: '#fff' }
+                    : { backgroundColor: c.bg, borderColor: c.border, color: c.text }
+                  }
+                >
+                  {!active && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.dot }} />}
+                  {t}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -110,6 +200,16 @@ export default function EntitiesPage({
               setEntities(prev => prev.map(e =>
                 e.id === updated.id ? { ...e, name: updated.name } : e
               ))
+            }}
+            onDeleted={() => {
+              setEntities(prev => prev.filter(e => e.id !== selected.id))
+              setSelected(null)
+            }}
+            onMerged={winner => {
+              // Remove the loser from list, update winner's entry, navigate to winner
+              setEntities(prev => prev.filter(e => e.id !== selected.id))
+              fetchEntities().then(all => setEntities(all))
+              setSelected(winner)
             }}
           />
         ) : (

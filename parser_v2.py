@@ -55,20 +55,41 @@ def annotate_log(
     raw_text: str,
     con: sqlite3.Connection,
     source_type: str = "text",
+    rejected_names: list[str] | None = None,
+    confirmed_names: list[str] | None = None,
 ) -> ParseResult:
     """
     Run the parser against an already-inserted log row.
     Use this when the log was saved by other means (e.g. the API).
     Returns the ParseResult.
+
+    rejected_names  — entity names the user has dismissed; LLM should skip them.
+    confirmed_names — names already handled via [[]] links; LLM should skip them.
     """
     current_date = datetime.date.today().isoformat()
 
+    messages = [
+        {"role": "system", "content": _build_system_prompt(current_date)},
+    ]
+    if rejected_names or confirmed_names:
+        context_lines = []
+        if confirmed_names:
+            context_lines.append(
+                "Already linked (skip these, do not re-tag): "
+                + ", ".join(f'"{n}"' for n in confirmed_names)
+            )
+        if rejected_names:
+            context_lines.append(
+                "Previously rejected by user (do not tag): "
+                + ", ".join(f'"{n}"' for n in rejected_names)
+            )
+        messages.append({"role": "system", "content": "\n".join(context_lines)})
+
+    messages.append({"role": "user", "content": raw_text})
+
     response = client.beta.chat.completions.parse(
         model=PARSER_MODEL,
-        messages=[
-            {"role": "system", "content": _build_system_prompt(current_date)},
-            {"role": "user",   "content": raw_text},
-        ],
+        messages=messages,
         response_format=ParseResult,
     )
 
@@ -109,33 +130,54 @@ def _resolve_spans(raw_text: str, result: ParseResult) -> None:
 
 
 def _build_system_prompt(current_date: str) -> str:
-    return f"""You are a personal log annotator. Extract every person and place mentioned \
-in the note — nothing else.
+    return f"""You are a personal log annotator. Extract every named entity mentioned \
+in the note.
 
 Today's date: {current_date}
 Narrator: All entries are written by {USER_NAME}. "I", "me", "my", "we" = {USER_NAME}.
 
 ━━━ MENTIONS ━━━
-Return one mention per named person or place you can identify.
+Return one mention per named entity you can identify.
 
 For each mention:
   text             — exact text as it appears in the note (used for highlighting)
-  candidate_type   — candidate_person OR candidate_place
+  candidate_type   — one of the 7 types below
   canonical_name_guess — your best guess at the stable/full name
                          (e.g. "Jen" → "Jennifer", "Lucio's" → "Lucio's")
   confidence       — 0.0–1.0 (see rules below)
 
-PEOPLE: anyone named or clearly referred to by pronoun when the referent is unambiguous.
+━━━ ENTITY TYPES ━━━
+
+candidate_person — any human being named or clearly referred to
   e.g. "He" when only one man is mentioned → include at 0.75
   e.g. "He" when multiple men mentioned → omit or include at 0.30
   Do NOT include {USER_NAME} — the narrator is always implied.
 
-PLACES: any named location — restaurants, parks, cities, campgrounds, stores, venues.
+candidate_place — any named location: restaurants, parks, cities, campgrounds, stores, venues
   Include informal names ("Lucio's", "the cabin", "LAX").
-  Include store/place names used as list headers or labels ("Costco extras:", "Target run").
-  The test: would this name appear on a sign, map, or receipt? If yes, extract it.
-  Do NOT include generic descriptions without a proper name ("the playground", \
-"a restaurant", "the lake", "home", "the office").
+  Include store/place names used as list headers ("Costco extras:", "Target run").
+  The test: would this name appear on a sign, map, or receipt? If yes, include it.
+  Do NOT include generic descriptions ("the playground", "a restaurant", "home", "the office").
+
+candidate_pet — any named animal belonging to or known by the narrator
+  e.g. "Biscuit", "our dog Max", "the neighbor's cat Whiskers"
+
+candidate_organization — companies, brands, institutions, teams, clubs
+  e.g. "SyFy", "Kaiser", "the HOA", "the PTA", "Apple"
+  Do NOT double-count: if Costco is already a place, don't also add it as an organization.
+  Use place for physical locations you visit; use organization for companies you refer to abstractly.
+
+candidate_event — named or recurring events with a distinct identity
+  e.g. "Thanksgiving", "Face Off wrap party", "the Hendersons' annual BBQ", "our trip to Ojai"
+  Do NOT include vague time references ("last week", "the other day").
+
+candidate_thing — specific physical objects worth remembering
+  e.g. "Mom's china", "the blue Le Creuset", "the Dyson", "my old Patagonia jacket"
+  Must be specific enough to be uniquely identifiable. Not "a knife" — "the chef's knife we got in Japan".
+
+candidate_idea — named concepts, plans, or recurring themes the narrator tracks
+  e.g. "the bullet-based note structure", "the Synology server plan", "the kitchen remodel idea"
+  High bar: must be something the narrator would want to look up later by name.
 
 ━━━ CONFIDENCE RULES ━━━
   0.85–0.95  clearly and directly stated
@@ -144,8 +186,8 @@ PLACES: any named location — restaurants, parks, cities, campgrounds, stores, 
   0.30–0.50  speculative or uncertain ("I think", "might", "maybe")
   Never output 1.0 — nothing in a casual note is certain.
 
-Confidence reflects certainty that the person/place is referenced — NOT certainty \
-about facts attributed to them.
+When uncertain between two types, pick the most specific one. When genuinely ambiguous, \
+prefer lower confidence over wrong type.
 
 ━━━ TAGS ━━━
 Return 1–4 lowercase tags describing what this note is about.

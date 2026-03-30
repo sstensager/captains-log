@@ -40,28 +40,52 @@ No new schema required. Low-hanging fruit that makes the system actually correct
 
 ---
 
-## Backlog
+## Active — Entity Management Backlog
 
-### Entity Management — Phase 2: Alias Table
+### Phase 2: Triage (no new schema)
+Quick wins that make the entity list trustworthy before adding infrastructure.
+
+- [ ] **Entity type correction** — dropdown on entity card to flip person↔place; re-runs promote with corrected type
+- [ ] **Delete / archive entity** — remove orphaned or wrong entities; soft-delete preferred (status='archived')
+- [ ] **Entity merge UI** — pick two entities, one absorbs the other; EntityReferences repointed, loser archived
+- [ ] **Manually create entity** — add a person/place not yet mentioned in any note
+
+### Phase 3: Alias Table
+Makes rename non-destructive — old notes stay linked after a rename.
+
 - [ ] `EntityAlias (entity_id, alias_name)` table + migration
 - [ ] Rename automatically creates an alias of the old name
 - [ ] Dedup/matching checks aliases — old notes still link after rename
 - [ ] Show aliases on entity card; allow add/remove
 
-### Entity Management — Phase 3: `[[]]` Syntax
+### Phase 4: `[[]]` Syntax
+User-explicit linking — bypasses the LLM entirely for known entities.
+
 - [ ] `extract_links()` regex: `[[Name]]` in raw_text → `provenance='user'` annotation, confidence 1.0
 - [ ] Renderer: `[[Name]]` displays as clickable entity chip inline
 - [ ] User annotations protected from reparse wipes (only delete `provenance='llm:*'` on edit)
 - [ ] Wire into dedup so `[[Beth Walker]]` finds existing "Beth" entity
 
-### Entity Management — Phase 4: Selection UI
+### Phase 5: Selection UI
+Point-and-click entity creation without typing `[[]]`.
+
 - [ ] Select text in read view → popover: "Mark as Person / Place"
 - [ ] Creates user annotation at correct span + entity + ref
 
-### Entity Management — Phase 5: Reconciliation
+### Phase 6: Reconciliation
+Keeps the graph consistent as it evolves.
+
 - [ ] `reconcile(log_id)` — re-runs entity matching (no LLM) when entity graph changes
 - [ ] Run after: note edit, entity rename, alias add, entity merge
 - [ ] Keeps old notes consistent with renamed/merged entities
+
+---
+
+## Backlog
+
+### Log Browsing
+- [ ] **Date grouping in log list** — group entries by day with a date header (already roughly sorted, just needs visual separation)
+- [ ] **Jump to date** — calendar picker or "jump to week" for navigating older entries
 
 ### Editor / Note View
 - [ ] **Visually connect todos to their section title** — "Costco shopping list:" above `[ ] eggs`
@@ -74,12 +98,6 @@ No new schema required. Low-hanging fruit that makes the system actually correct
 - [ ] Delete / archive individual todos
 - [ ] Global todo full-text search
 - [ ] "Named list" concept — group todos under a user-defined list name
-
-### Entities
-- [ ] Entity merge UI ("Josh" + "Joshua Tree National Park" → one entity)
-- [ ] Delete / archive entity
-- [ ] Manually create entity (not from a note)
-- [ ] Entity type correction in UI (re-run promote with corrected type)
 
 ### Infrastructure / Later
 - [ ] Voice input — Whisper → same parse path as text
