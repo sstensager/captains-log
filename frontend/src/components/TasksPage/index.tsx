@@ -171,12 +171,35 @@ export default function TasksPage({ onSelectLog }: Props) {
   const activeEntity = filter?.kind === 'entity' ? filter.value : null
 
   return (
-    <div className="flex flex-1 min-h-0">
-      {/* Left: filters */}
-      <div className="w-[220px] shrink-0 flex flex-col h-full bg-gray-50 border-r border-gray-200">
-        <div className="flex-1 overflow-y-auto py-4 px-3 space-y-4">
+    <div className="flex flex-col md:flex-row flex-1 min-h-0">
+      {/* Filters — sidebar on desktop, compact top bar on mobile */}
+      <div className="md:w-[220px] shrink-0 flex flex-col bg-gray-50 border-b md:border-b-0 md:border-r border-gray-200">
+        {/* Mobile: single compact row */}
+        <div className="flex md:hidden items-center gap-2 px-3 py-2">
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs shrink-0">
+            {(['open', 'done'] as StatusFilter[]).map(s => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`px-2.5 py-1.5 transition-colors ${
+                  statusFilter === s ? 'bg-gray-900 text-white' : 'bg-white text-gray-500'
+                }`}
+              >
+                {s === 'open' ? `Open (${openCount})` : `Done (${doneCount})`}
+              </button>
+            ))}
+          </div>
+          <input
+            type="text"
+            placeholder="Search…"
+            value={searchInput}
+            onChange={e => handleSearch(e.target.value)}
+            className="flex-1 text-sm bg-white border border-gray-200 rounded-md px-3 py-1.5 outline-none focus:border-gray-400 placeholder-gray-400"
+          />
+        </div>
 
-          {/* Status tabs */}
+        {/* Desktop: full sidebar */}
+        <div className="hidden md:flex flex-1 overflow-y-auto py-4 px-3 space-y-4 flex-col">
           <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
             {(['open', 'done'] as StatusFilter[]).map(s => (
               <button
@@ -191,7 +214,6 @@ export default function TasksPage({ onSelectLog }: Props) {
             ))}
           </div>
 
-          {/* Unified search */}
           <div>
             <input
               type="text"
@@ -211,7 +233,6 @@ export default function TasksPage({ onSelectLog }: Props) {
             )}
           </div>
 
-          {/* Tag pills */}
           {allTags.length > 0 && (
             <div>
               <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tags</div>
@@ -231,10 +252,9 @@ export default function TasksPage({ onSelectLog }: Props) {
             </div>
           )}
 
-          {/* Entity pills */}
           {allEntities.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">People & Places</div>
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nodes</div>
               <div className="flex flex-wrap gap-1">
                 {allEntities.map(entity => {
                   const c = colorFor(entity.type)
@@ -260,8 +280,8 @@ export default function TasksPage({ onSelectLog }: Props) {
         </div>
       </div>
 
-      {/* Right: task groups */}
-      <div className="flex-1 overflow-y-auto p-6">
+      {/* Task groups */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6">
         {loading ? (
           <div className="text-sm text-gray-400">Loading…</div>
         ) : snapshotGroups.length === 0 ? (
@@ -332,7 +352,7 @@ export default function TasksPage({ onSelectLog }: Props) {
                             <div
                               key={id}
                               className={`flex items-center gap-3 py-2.5 pr-4 transition-opacity ${done ? 'opacity-50' : ''}`}
-                              style={{ paddingLeft: `${1 + (task.indent ?? 0) * 1.25}rem` }}
+                              style={{ paddingLeft: `${Math.min(1 + (task.indent ?? 0) * 1.25, 4)}rem` }}
                             >
                               <button
                                 onClick={() => toggle(task)}

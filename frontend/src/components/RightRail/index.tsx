@@ -154,7 +154,7 @@ function ContextPanel({
               <button
                 key={value}
                 onClick={() => onSelectEntity(value)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 text-left"
+                className="w-full flex items-center gap-2 px-2 py-3 rounded hover:bg-gray-50 text-left"
               >
                 {isConfirmed
                   ? <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />

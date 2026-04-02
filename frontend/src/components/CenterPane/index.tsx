@@ -113,7 +113,7 @@ function EntityMark({
                   <button
                     key={e.id}
                     onMouseDown={ev => { ev.preventDefault(); onRelink(annotationId, e.name); setOpen(false) }}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+                    className="flex items-center gap-2 px-3 py-3 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
                   >
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: ec.dot }} />
                     {e.name}
@@ -123,14 +123,14 @@ function EntityMark({
               {relinkQuery.trim() && (
                 <button
                   onMouseDown={ev => { ev.preventDefault(); onRelink(annotationId, relinkQuery.trim()); setOpen(false) }}
-                  className={`px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-gray-400 whitespace-nowrap italic ${filteredRelink.length > 0 ? 'border-t border-gray-100' : ''}`}
+                  className={`px-3 py-3 text-xs text-left hover:bg-gray-50 text-gray-400 whitespace-nowrap italic ${filteredRelink.length > 0 ? 'border-t border-gray-100' : ''}`}
                 >
                   Create "{relinkQuery.trim()}"
                 </button>
               )}
               <button
                 onMouseDown={e => { e.preventDefault(); setRelinking(false) }}
-                className="px-3 py-1.5 text-xs text-left text-gray-300 hover:text-gray-500 border-t border-gray-100"
+                className="px-3 py-3 text-xs text-left text-gray-300 hover:text-gray-500 border-t border-gray-100"
               >
                 ← Back
               </button>
@@ -140,7 +140,7 @@ function EntityMark({
               {isLlm && (
                 <button
                   onMouseDown={e => { e.preventDefault(); onPromote(annotationId); setOpen(false) }}
-                  className="px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+                  className="px-3 py-3 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
                 >
                   Link as <span className="font-mono text-blue-600">[[{displayText}]]</span>
                 </button>
@@ -153,7 +153,7 @@ function EntityMark({
               </button>
               <button
                 onMouseDown={e => { e.preventDefault(); onReject(annotationId); setOpen(false) }}
-                className="px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-red-500 whitespace-nowrap"
+                className="px-3 py-3 text-xs text-left hover:bg-gray-50 text-red-500 whitespace-nowrap"
               >
                 Remove reference
               </button>
@@ -586,13 +586,13 @@ function EditAnnotationChip({
         <span className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 flex flex-col py-1 min-w-max">
           <button
             onMouseDown={e => { e.preventDefault(); handleLink() }}
-            className="px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+            className="px-3 py-3 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
           >
             Link as <span className="font-mono text-blue-600">[[{name}]]</span>
           </button>
           <button
             onMouseDown={e => { e.preventDefault(); onDismiss(); setOpen(false) }}
-            className="px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-red-500 whitespace-nowrap"
+            className="px-3 py-3 text-xs text-left hover:bg-gray-50 text-red-500 whitespace-nowrap"
           >
             Remove reference
           </button>
@@ -680,8 +680,8 @@ function EditView({
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
-      <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white">
-        <span className="text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
+      <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200 bg-white">
+        <span className="hidden sm:block text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
         <div className="flex gap-2">
           <button onClick={onCancel} className="text-sm text-gray-400 hover:text-gray-700 transition-colors">Cancel</button>
           <button
@@ -702,7 +702,7 @@ function EditView({
           onDismiss={handleDismiss}
         />
       )}
-      <div className="flex-1 flex flex-col p-8 min-h-0">
+      <div className="flex-1 flex flex-col p-4 md:p-8 min-h-0">
         <SmartTextarea
           value={text}
           onChange={setText}
@@ -739,11 +739,11 @@ function ComposeView({
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
-      <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white">
+      <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200 bg-white">
         <span className="text-sm text-gray-400">{relativeDate(new Date().toISOString())}</span>
-        <span className="text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
+        <span className="hidden sm:block text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
       </div>
-      <div className="flex-1 flex flex-col p-8 min-h-0">
+      <div className="flex-1 flex flex-col p-4 md:p-8 min-h-0">
         <SmartTextarea
           value={text}
           onChange={setText}
@@ -994,7 +994,7 @@ export default function CenterPane({
         {loading ? (
           <LogSkeleton />
         ) : log ? (
-          <div className="px-8 py-6 max-w-2xl">
+          <div className="px-4 md:px-8 py-4 md:py-6 max-w-2xl">
             <div className="mb-6">
               {renderBody(
                 log.raw_text,

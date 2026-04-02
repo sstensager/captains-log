@@ -96,7 +96,7 @@ export default function LeftRail({
       )}
 
       {/* Log list */}
-      <div className="flex-1 overflow-y-auto py-1 px-1">
+      <div className="flex-1 overflow-y-auto py-2 px-2 space-y-1.5">
         {loading ? (
           <Skeleton />
         ) : displayedLogs.length === 0 ? (

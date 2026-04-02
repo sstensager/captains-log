@@ -22,10 +22,10 @@ export default function LogListItem({ log, active, activeTag, onClick, onTagClic
     <button
       ref={ref}
       onClick={onClick}
-      className={`w-full text-left px-3 py-3 rounded-lg transition-colors ${
+      className={`w-full text-left px-3 py-3 rounded-lg border transition-colors ${
         active
-          ? 'bg-white border border-gray-200 shadow-sm'
-          : 'hover:bg-gray-100'
+          ? 'bg-white border-gray-300 shadow-sm'
+          : 'bg-white border-gray-100 hover:border-gray-200 hover:bg-gray-50'
       }`}
     >
       <div className="flex items-center justify-between mb-1">

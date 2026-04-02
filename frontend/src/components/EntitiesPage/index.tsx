@@ -66,10 +66,13 @@ export default function EntitiesPage({
     if (creating) setTimeout(() => newNameRef.current?.focus(), 0)
   }, [creating])
 
+  // On mobile: show detail panel when something is selected, list otherwise
+  const showDetail = selected !== null
+
   return (
     <div className="flex flex-1 min-h-0">
-      {/* List panel */}
-      <div className="w-72 shrink-0 flex flex-col border-r border-gray-200 bg-white">
+      {/* List panel — full screen on mobile when no selection */}
+      <div className={`${showDetail ? 'hidden md:flex' : 'flex'} md:flex w-full md:w-72 shrink-0 flex-col border-r border-gray-200 bg-white`}>
         {/* Search + filter */}
         <div className="px-3 pt-3 pb-2 border-b border-gray-100 space-y-2">
           <div className="flex gap-1.5">
@@ -86,7 +89,7 @@ export default function EntitiesPage({
               className={`text-xs px-2.5 py-1 rounded border transition-colors ${creating ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}
               title="New entity"
             >
-              + New
+              {creating ? 'Cancel' : '+ New'}
             </button>
           </div>
 
@@ -189,31 +192,41 @@ export default function EntitiesPage({
         </div>
       </div>
 
-      {/* Detail panel */}
-      <div className="flex-1 overflow-y-auto bg-white">
+      {/* Detail panel — full screen on mobile when selected */}
+      <div className={`${showDetail ? 'flex' : 'hidden md:flex'} flex-col flex-1 min-h-0 overflow-y-auto bg-white`}>
         {selected ? (
-          <EntityDetailView
-            entity={selected}
-            onSelectLog={onSelectLog}
-            onUpdated={updated => {
-              setSelected(updated)
-              setEntities(prev => prev.map(e =>
-                e.id === updated.id ? { ...e, name: updated.name } : e
-              ))
-            }}
-            onDeleted={() => {
-              setEntities(prev => prev.filter(e => e.id !== selected.id))
-              setSelected(null)
-            }}
-            onMerged={winner => {
-              // Remove the loser from list, update winner's entry, navigate to winner
-              setEntities(prev => prev.filter(e => e.id !== selected.id))
-              fetchEntities().then(all => setEntities(all))
-              setSelected(winner)
-            }}
-          />
+          <>
+            {/* Mobile back button */}
+            <div className="md:hidden flex items-center px-4 py-3 border-b border-gray-200">
+              <button
+                onClick={() => setSelected(null)}
+                className="text-sm text-gray-500 hover:text-gray-800 flex items-center gap-1"
+              >
+                ‹ Nodes
+              </button>
+            </div>
+            <EntityDetailView
+              entity={selected}
+              onSelectLog={onSelectLog}
+              onUpdated={updated => {
+                setSelected(updated)
+                setEntities(prev => prev.map(e =>
+                  e.id === updated.id ? { ...e, name: updated.name } : e
+                ))
+              }}
+              onDeleted={() => {
+                setEntities(prev => prev.filter(e => e.id !== selected.id))
+                setSelected(null)
+              }}
+              onMerged={winner => {
+                setEntities(prev => prev.filter(e => e.id !== selected.id))
+                fetchEntities().then(all => setEntities(all))
+                setSelected(winner)
+              }}
+            />
+          </>
         ) : (
-          <div className="flex items-center justify-center h-full">
+          <div className="hidden md:flex items-center justify-center h-full">
             <p className="text-sm text-gray-400">Select a person or place</p>
           </div>
         )}

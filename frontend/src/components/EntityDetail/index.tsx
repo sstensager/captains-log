@@ -241,7 +241,7 @@ export default function EntityDetailView({
               <button
                 key={i}
                 onClick={() => onSelectLog(m.log_id)}
-                className="w-full text-left text-xs bg-gray-50 hover:bg-gray-100 rounded p-2 transition-colors"
+                className="w-full text-left text-xs bg-gray-50 hover:bg-gray-100 rounded p-3 transition-colors"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-gray-400">{relativeDate(m.ts)}</span>
@@ -407,7 +407,7 @@ function MergeButton({
               <button
                 key={opt.key}
                 onClick={() => setWinner(opt.key)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-left transition-colors"
+                className="w-full flex items-center gap-2 px-2 py-3 rounded border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-left transition-colors"
               >
                 <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
                 <span className="text-xs text-gray-800 flex-1 font-medium">{opt.name}</span>
@@ -442,7 +442,7 @@ function MergeButton({
                 <button
                   key={e.id}
                   onClick={() => setTarget(e)}
-                  className="w-full flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-50"
+                  className="w-full flex items-center gap-2 px-2 py-3 rounded text-left hover:bg-gray-50"
                 >
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
                   <span className="text-xs text-gray-800 flex-1 truncate">{e.name}</span>

@@ -1,6 +1,6 @@
 # Captain's Log — TODO
 
-*Last updated: 2026-03-28*
+*Last updated: 2026-04-01*
 
 ---
 
@@ -15,94 +15,69 @@
 
 ## Recently Shipped
 
-- Single-pass LLM parser (person + place, false-positive heuristics)
+- Single-pass LLM parser (person + place → 7 entity types, false-positive heuristics)
 - Annotation → Entity → EntityReference promotion pipeline with fuzzy dedup
 - Full-text search (SQLite FTS5)
 - React/Vite/Tailwind frontend: log list, compose, read view, right rail
-- Entity browser ("People & Places") with type filter + entity detail
+- Entity browser with type filter + entity detail (rename, notes, merge, archive)
 - Tags: LLM extracts 1–4 labels per note, filterable everywhere
-- Todos: `[ ]`/`[x]` regex extraction → Task rows + live checkboxes in note view
-- Todos page: grouped by source note, section headers, indentation, tag+entity filter, open/done tabs, snapshot pattern (no jumping on complete)
-- Note editing with smart textarea (Tab indent/dedent, auto-continue bullets/todos on Enter)
-- Bullet rendering in read view (`- item` → `• item` with indent levels)
+- Todos: `[ ]`/`[x]` extraction → Task rows + live checkboxes in note view
+- Todos page: grouped by source note, section headers, indentation, tag+entity filter, open/done tabs
+- Note editing: smart textarea (Tab indent/dedent, bullet/todo auto-continue, `[[` autocomplete)
+- Bullet rendering in read view
+- Three-tier annotation model: suggested (LLM) → `{Name}` (persistent soft marker) → `[[Name]]` (confirmed)
+- Inline entity marks with `▾` action menu: confirm, reject, relink to different entity
+- Suggested vs. confirmed visual distinction (dashed/solid underline, hollow/filled dot)
+- Entity management: create, rename, notes, merge, archive, type correction
+- `updated_at` on Log; no-op edit short-circuits reparse
+- **Mobile-responsive layout**: stacked panels, bottom tab nav, back navigation
 
 ---
 
-## Active — Phase 1: Entity Management (Basic)
+## Mobile Polish (from first dogfood pass)
 
-No new schema required. Low-hanging fruit that makes the system actually correctable.
+Quick wins:
+- [ ] **New entity cancel button** — "+ New" form on Entities page has no mobile-accessible cancel; add Cancel button or make the button toggle the form closed
+- [ ] **Task row overflow** — checkbox rows with indentation overflow screen on mobile; reduce base indent and clamp max
+- [ ] **Merge dropdown tap targets** — entity merge list items need ≥44px touch targets on mobile
 
-- [x] `PATCH /api/entities/{id}` — rename + user_notes edit
-- [x] Annotation rejection cascade — reject chip → delete EntityReference → flag orphan entity
-- [x] EntityDetailView inline rename (click name → edit in place)
-- [x] EntityDetailView user_notes inline edit
-- [x] × button on entity chips in note view to dismiss false positives
+Medium:
+- [ ] **Log list visual distinction** — items blur together on mobile; add card treatment (border/shadow/divider) so each entry reads as tappable
+- [ ] **Context panel log header** — when viewing context/entity panels, show a sticky header with the log date + preview so user knows which log they're in
+- [ ] **Entity detail breadcrumb** — "‹ Context" back button exists but no forward breadcrumb header ("Context › Robert Smith"); add consistent heading
+- [ ] **Tag tap feedback on mobile** — tapping a tag in log view silently filters the hidden log list; either navigate back with filter applied or show a visible confirmation
+- [ ] **Rename "People & Places"** — now inaccurate with 7 entity types; candidates: "Entities", "People & Things"; needs a decision
+
+Bigger / needs design:
+- [ ] **Slide-out nav drawer** — "‹ Back to logs" feels wrong; log list should be a persistent drawer (Notion/Logseq style) that slides over the current view; tapping the Logs tab when already in logs should open the drawer
+- [ ] **Tasks page rethink** — entity-filtered task view ("all todos mentioning Costco") is the killer feature; current log-grouped layout buries this; entity filter should be front-and-center
+- [ ] **Tasks → log navigation** — tapping a task group's log source should scroll to that task in the log, not just open the top of the log; needs back navigation to return to Tasks
 
 ---
 
-## Active — Entity Management Backlog
+## Dogfooding / Deployment
 
-### Phase 2: Triage (no new schema)
-Quick wins that make the entity list trustworthy before adding infrastructure.
-
-- [ ] **Entity type correction** — dropdown on entity card to flip person↔place; re-runs promote with corrected type
-- [ ] **Delete / archive entity** — remove orphaned or wrong entities; soft-delete preferred (status='archived')
-- [ ] **Entity merge UI** — pick two entities, one absorbs the other; EntityReferences repointed, loser archived
-- [ ] **Manually create entity** — add a person/place not yet mentioned in any note
-
-### Phase 3: Alias Table
-Makes rename non-destructive — old notes stay linked after a rename.
-
-- [ ] `EntityAlias (entity_id, alias_name)` table + migration
-- [ ] Rename automatically creates an alias of the old name
-- [ ] Dedup/matching checks aliases — old notes still link after rename
-- [ ] Show aliases on entity card; allow add/remove
-
-### Phase 4: `[[]]` Syntax
-User-explicit linking — bypasses the LLM entirely for known entities.
-
-- [ ] `extract_links()` regex: `[[Name]]` in raw_text → `provenance='user'` annotation, confidence 1.0
-- [ ] Renderer: `[[Name]]` displays as clickable entity chip inline
-- [ ] User annotations protected from reparse wipes (only delete `provenance='llm:*'` on edit)
-- [ ] Wire into dedup so `[[Beth Walker]]` finds existing "Beth" entity
-
-### Phase 5: Selection UI
-Point-and-click entity creation without typing `[[]]`.
-
-- [ ] Select text in read view → popover: "Mark as Person / Place"
-- [ ] Creates user annotation at correct span + entity + ref
-
-### Phase 6: Reconciliation
-Keeps the graph consistent as it evolves.
-
-- [ ] `reconcile(log_id)` — re-runs entity matching (no LLM) when entity graph changes
-- [ ] Run after: note edit, entity rename, alias add, entity merge
-- [ ] Keeps old notes consistent with renamed/merged entities
+- [ ] **Fly.io deploy** — FastAPI + built frontend in one container, SQLite on persistent volume, `yourapp.fly.dev` URL
+- [ ] **Basic auth** — single shared password via FastAPI middleware; no per-user accounts yet
+- [ ] **Timeline / journal view** — group log list by today / yesterday / this week / last week (data is already there, pure frontend)
+- [ ] **Entity split** — when one entity name maps to two different real people/places, split mentions into separate entities; deferred until it becomes a real pain point in use
 
 ---
 
 ## Backlog
 
-### Log Browsing
-- [ ] **Date grouping in log list** — group entries by day with a date header (already roughly sorted, just needs visual separation)
-- [ ] **Jump to date** — calendar picker or "jump to week" for navigating older entries
-
 ### Editor / Note View
-- [ ] **Visually connect todos to their section title** — "Costco shopping list:" above `[ ] eggs`
-      is the section header but there's no visual affordance connecting them in the note view.
-      Could be subtle styling on any non-todo line that is immediately followed by todos.
-- [ ] WYSIWYG editor (Lexical) — needed before this is truly usable as a daily driver.
-      Checkboxes clickable while editing, entity highlights as you type.
+- [ ] WYSIWYG editor (Lexical) — checkboxes clickable while editing, entity highlights as you type
+- [ ] Visually connect todos to their section title — subtle styling on lines immediately followed by todos
 
-### Todos
-- [ ] Delete / archive individual todos
-- [ ] Global todo full-text search
-- [ ] "Named list" concept — group todos under a user-defined list name
+### Entities
+- [ ] Alias table — `EntityAlias(entity_id, alias_name)`; rename creates alias; old notes stay linked
+- [ ] Reconcile — re-run entity matching (no LLM) after rename/merge/alias to keep old notes consistent
+- [ ] Date extraction — detect "last Tuesday", "March 15th" as time references linked to logs
 
 ### Infrastructure / Later
-- [ ] Voice input — Whisper → same parse path as text
-- [ ] Mobile layout
 - [ ] Natural language query ("what did we think about Kirk Creek?")
-- [ ] Semantic search (LogEmbedding table exists, embedding search not wired to UI)
-- [ ] Supabase / Postgres migration
-- [ ] Auth + sync
+- [ ] Semantic search (LogEmbedding table exists, not wired to UI)
+- [ ] Voice input — Whisper → same parse path as text
+- [ ] Multi-user / spaces — shared entity graph with private + shared note spaces (Notion-style workspaces)
+- [ ] Supabase / Postgres migration (when SQLite stops being enough)

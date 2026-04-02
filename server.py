@@ -238,7 +238,7 @@ def search_logs(q: str = ""):
         return [_log_summary(con, r) for r in rows]
 
     from retrieval_v2 import fts_search
-    results = fts_search(con, q, top_k=30)
+    results = fts_search(con, q, limit=30)
     if not results:
         return []
 

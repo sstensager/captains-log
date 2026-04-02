@@ -86,7 +86,7 @@ export default function App() {
 
   const NAV_ITEMS: { key: Page; label: string }[] = [
     { key: 'logs', label: 'Logs' },
-    { key: 'entities', label: 'People & Places' },
+    { key: 'entities', label: 'Nodes' },
     { key: 'tasks', label: 'Todos' },
   ]
 
