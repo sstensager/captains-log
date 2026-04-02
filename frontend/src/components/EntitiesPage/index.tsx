@@ -70,7 +70,7 @@ export default function EntitiesPage({
   const showDetail = selected !== null
 
   return (
-    <div className="flex flex-1 min-h-0">
+    <div className="flex flex-1 min-h-0 min-w-0">
       {/* List panel — full screen on mobile when no selection */}
       <div className={`${showDetail ? 'hidden md:flex' : 'flex'} md:flex w-full md:w-72 shrink-0 flex-col border-r border-gray-200 bg-white`}>
         {/* Search + filter */}
@@ -200,9 +200,9 @@ export default function EntitiesPage({
             <div className="md:hidden flex items-center px-4 py-3 border-b border-gray-200">
               <button
                 onClick={() => setSelected(null)}
-                className="text-sm text-gray-500 hover:text-gray-800 flex items-center gap-1"
+                className="text-gray-400 hover:text-gray-600 p-1 -ml-1"
               >
-                ‹ Nodes
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
             </div>
             <EntityDetailView

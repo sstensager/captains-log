@@ -30,37 +30,47 @@
 - Suggested vs. confirmed visual distinction (dashed/solid underline, hollow/filled dot)
 - Entity management: create, rename, notes, merge, archive, type correction
 - `updated_at` on Log; no-op edit short-circuits reparse
-- **Mobile-responsive layout**: stacked panels, bottom tab nav, back navigation
+- **Mobile-responsive layout**: stacked panels, bottom tab nav, SVG chevron back buttons
+- **Mobile polish pass**: card treatment, tap targets, entity breadcrumb, log context strip with entity snippet + tap-to-navigate, tag tap → navigate to filtered log list, task overflow fix (`min-w-0`), Nodes rename
 
 ---
 
-## Mobile Polish (from first dogfood pass)
+## Next Session: Make Todos Awesome
 
-Quick wins:
-- [ ] **New entity cancel button** — "+ New" form on Entities page has no mobile-accessible cancel; add Cancel button or make the button toggle the form closed
-- [ ] **Task row overflow** — checkbox rows with indentation overflow screen on mobile; reduce base indent and clamp max
-- [ ] **Merge dropdown tap targets** — entity merge list items need ≥44px touch targets on mobile
+The Todos page works but isn't yet a reason to open the app. Two things would make it genuinely useful:
 
-Medium:
-- [ ] **Log list visual distinction** — items blur together on mobile; add card treatment (border/shadow/divider) so each entry reads as tappable
-- [ ] **Context panel log header** — when viewing context/entity panels, show a sticky header with the log date + preview so user knows which log they're in
-- [ ] **Entity detail breadcrumb** — "‹ Context" back button exists but no forward breadcrumb header ("Context › Robert Smith"); add consistent heading
-- [ ] **Tag tap feedback on mobile** — tapping a tag in log view silently filters the hidden log list; either navigate back with filter applied or show a visible confirmation
-- [ ] **Rename "People & Places"** — now inaccurate with 7 entity types; candidates: "Entities", "People & Things"; needs a decision
+### 1. Entity-filtered task view (killer feature)
+**What:** "Show me all open todos mentioning Costco" — cross-log task view filtered by entity.
+**Why:** The current log-grouped layout buries the real value. Entity filter should be front-and-center, not an afterthought in the sidebar.
+**How:** The sidebar already has entity chips (from `allEntities`). Selecting one should be the primary UX, not just a filter refinement. Consider making entity/tag filter the hero of the page rather than open/done tabs.
 
-Bigger / needs design:
-- [ ] **Slide-out nav drawer** — "‹ Back to logs" feels wrong; log list should be a persistent drawer (Notion/Logseq style) that slides over the current view; tapping the Logs tab when already in logs should open the drawer
-- [ ] **Tasks page rethink** — entity-filtered task view ("all todos mentioning Costco") is the killer feature; current log-grouped layout buries this; entity filter should be front-and-center
-- [ ] **Tasks → log navigation** — tapping a task group's log source should scroll to that task in the log, not just open the top of the log; needs back navigation to return to Tasks
+### 2. Tasks → log navigation with scroll-to-task
+**What:** Tapping a task group's log source header should open that log AND scroll to / highlight the task section, not just open the top of the log.
+**Why:** Right now tapping the log title just dumps you at the top. On a long note this is disorienting.
+**How:** The log view (`CenterPane`) renders tasks as checkboxes inline. Need to: (a) pass a `focusTaskId` or `focusSection` prop to CenterPane, (b) scroll to that element after render, (c) add back navigation to return to Tasks. Back nav should be a chevron (same SVG as rest of app) in the CenterPane topbar that only appears when navigated from Tasks.
+
+### 3. (Smaller) Done tab UX
+**What:** "Done" tab shows fully-completed task groups. Currently a bit hard to parse since done items look the same as open ones.
+**Consider:** Greying out the whole card more aggressively, or collapsing done groups by default.
 
 ---
 
-## Dogfooding / Deployment
+## Deployment (after Todos)
 
 - [ ] **Fly.io deploy** — FastAPI + built frontend in one container, SQLite on persistent volume, `yourapp.fly.dev` URL
+  - `fly launch` → set up `fly.toml`, Dockerfile
+  - Mount persistent volume at `/data` for SQLite
+  - `npm run build` output served as static files by FastAPI (`StaticFiles`)
+  - Set `ANTHROPIC_API_KEY` as a Fly secret
 - [ ] **Basic auth** — single shared password via FastAPI middleware; no per-user accounts yet
-- [ ] **Timeline / journal view** — group log list by today / yesterday / this week / last week (data is already there, pure frontend)
-- [ ] **Entity split** — when one entity name maps to two different real people/places, split mentions into separate entities; deferred until it becomes a real pain point in use
+- [ ] **Timeline / journal view** — group log list by today / yesterday / this week / last week (pure frontend, data already there)
+
+---
+
+## Bigger / Needs Design
+
+- [ ] **Slide-out nav drawer** — log list as a persistent drawer (Notion/Logseq style); tapping Logs tab when already on Logs opens it; replaces current mobile "list → detail" stacking
+- [ ] **Entity split** — when one name maps to two real people/places, split mentions into separate entities; defer until it's a real pain point
 
 ---
 
@@ -68,16 +78,16 @@ Bigger / needs design:
 
 ### Editor / Note View
 - [ ] WYSIWYG editor (Lexical) — checkboxes clickable while editing, entity highlights as you type
-- [ ] Visually connect todos to their section title — subtle styling on lines immediately followed by todos
+- [ ] Visually connect todos to their section title
 
 ### Entities
 - [ ] Alias table — `EntityAlias(entity_id, alias_name)`; rename creates alias; old notes stay linked
-- [ ] Reconcile — re-run entity matching (no LLM) after rename/merge/alias to keep old notes consistent
-- [ ] Date extraction — detect "last Tuesday", "March 15th" as time references linked to logs
+- [ ] Reconcile — re-run entity matching (no LLM) after rename/merge/alias
+- [ ] Date extraction — detect "last Tuesday", "March 15th" as time references
 
 ### Infrastructure / Later
 - [ ] Natural language query ("what did we think about Kirk Creek?")
 - [ ] Semantic search (LogEmbedding table exists, not wired to UI)
 - [ ] Voice input — Whisper → same parse path as text
-- [ ] Multi-user / spaces — shared entity graph with private + shared note spaces (Notion-style workspaces)
+- [ ] Multi-user / spaces — shared entity graph with private + shared note spaces
 - [ ] Supabase / Postgres migration (when SQLite stops being enough)

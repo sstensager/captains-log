@@ -89,11 +89,11 @@ function EntityChip({ entity, onClick }: { entity: TaskEntityRef; onClick?: () =
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full border hover:opacity-75 transition-opacity"
+      className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full border hover:opacity-75 transition-opacity max-w-[160px]"
       style={{ backgroundColor: c.bg, borderColor: c.border, color: c.text }}
     >
-      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.dot }} />
-      {entity.name}
+      <span className="w-1.5 h-1.5 shrink-0 rounded-full" style={{ backgroundColor: c.dot }} />
+      <span className="truncate">{entity.name}</span>
     </button>
   )
 }
@@ -171,7 +171,7 @@ export default function TasksPage({ onSelectLog }: Props) {
   const activeEntity = filter?.kind === 'entity' ? filter.value : null
 
   return (
-    <div className="flex flex-col md:flex-row flex-1 min-h-0">
+    <div className="flex flex-col md:flex-row flex-1 min-h-0 min-w-0">
       {/* Filters — sidebar on desktop, compact top bar on mobile */}
       <div className="md:w-[220px] shrink-0 flex flex-col bg-gray-50 border-b md:border-b-0 md:border-r border-gray-200">
         {/* Mobile: single compact row */}
@@ -293,7 +293,7 @@ export default function TasksPage({ onSelectLog }: Props) {
               : 'No completed lists yet'}
           </div>
         ) : (
-          <div className="max-w-2xl space-y-6">
+          <div className="w-full max-w-2xl space-y-6">
             {snapshotGroups.map(group => {
               // Get live task data for rendering (status may have changed)
               const taskById = (id: number) => tasks.find(t => t.id === id)
@@ -362,7 +362,7 @@ export default function TasksPage({ onSelectLog }: Props) {
                               >
                                 {done && '✓'}
                               </button>
-                              <span className={`text-sm ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                              <span className={`text-sm min-w-0 break-words ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                                 {task.title}
                               </span>
                             </div>

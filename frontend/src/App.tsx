@@ -79,6 +79,11 @@ export default function App() {
     setMobileView('detail')
   }
 
+  const handleTagClick = (tag: string | null) => {
+    setActiveTag(tag)
+    if (tag) { setPage('logs'); setMobileView('list') }
+  }
+
   const handleToggleRightRail = () => {
     setRightRailOpen(o => !o)
     setMobileView('context')
@@ -122,7 +127,7 @@ export default function App() {
                 onNewLog={handleNewLog}
                 onLogsChange={setLogs}
                 activeTag={activeTag}
-                onTagClick={setActiveTag}
+                onTagClick={handleTagClick}
               />
             </div>
 
@@ -138,7 +143,7 @@ export default function App() {
                 onToggleRightRail={handleToggleRightRail}
                 rightRailOpen={rightRailOpen}
                 onEntityClick={handleEntityClick}
-                onTagClick={setActiveTag}
+                onTagClick={handleTagClick}
                 refreshKey={logRefreshKey}
                 onBack={() => setMobileView('list')}
               />
