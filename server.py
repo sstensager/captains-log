@@ -420,6 +420,20 @@ def _bg_reparse(log_id: int, raw_text: str) -> None:
             extract_links(log_id, new_text, con)
 
         promote_all_mentions(con, min_confidence=0.7)
+
+        # Orphan any entities that lost all their references during reparse
+        orphan_rows = con.execute("""
+            SELECT e.id FROM Entity e
+            WHERE e.merged_into_id IS NULL AND e.status NOT IN ('orphaned', 'archived')
+              AND NOT EXISTS (SELECT 1 FROM EntityReference er WHERE er.entity_id = e.id)
+        """).fetchall()
+        if orphan_rows:
+            ids_ph = ",".join("?" * len(orphan_rows))
+            con.execute(
+                f"UPDATE Entity SET status = 'orphaned' WHERE id IN ({ids_ph})",
+                [r[0] for r in orphan_rows],
+            )
+            con.commit()
     except Exception as e:
         print(f"[bg_reparse error] log {log_id}: {e}")
 

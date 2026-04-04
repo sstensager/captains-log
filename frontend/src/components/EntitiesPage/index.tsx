@@ -33,6 +33,7 @@ export default function EntitiesPage({
   }, [selected?.name])
 
   const filtered = entities.filter(e => {
+    if (e.status === 'orphaned') return false
     const matchesQuery = e.name.toLowerCase().includes(query.toLowerCase())
     const matchesType = typeFilter === 'all' || e.type === typeFilter
     return matchesQuery && matchesType

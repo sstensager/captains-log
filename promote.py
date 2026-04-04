@@ -116,15 +116,22 @@ def clip_excerpt(raw_text: str, start_char: int | None, end_char: int | None,
 # Entity dedup
 # ---------------------------------------------------------------------------
 
+def _normalize(s: str) -> str:
+    """Lowercase and strip punctuation for dedup comparisons."""
+    return re.sub(r"[^\w\s]", "", s.lower()).strip()
+
+
 def find_entity(con: sqlite3.Connection, name: str, entity_type: str) -> int | None:
     """
     Return entity_id if a matching entity already exists, else None.
     Match order:
       1. Exact (case-insensitive)
-      2. Substring: "Jen" ↔ "Jennifer", "Kirk Creek" ↔ "Kirk Creek Campground"
-      3. Fuzzy (difflib, cutoff 0.80)
+      2. Normalized exact (strip punctuation — catches "Ralph's" == "Ralphs")
+      3. Substring: "Jen" ↔ "Jennifer", "Kirk Creek" ↔ "Kirk Creek Campground"
+      4. Fuzzy (difflib, cutoff 0.80)
     """
     name_lower = name.strip().lower()
+    name_norm = _normalize(name)
 
     # 1. Exact
     row = con.execute(
@@ -134,7 +141,7 @@ def find_entity(con: sqlite3.Connection, name: str, entity_type: str) -> int | N
     if row:
         return row[0]
 
-    # 2 & 3. Load all existing entities of this type
+    # 2 & 3 & 4. Load all existing entities of this type
     existing = con.execute(
         "SELECT id, canonical_name FROM Entity WHERE entity_type = ? AND merged_into_id IS NULL",
         (entity_type,),
@@ -142,13 +149,18 @@ def find_entity(con: sqlite3.Connection, name: str, entity_type: str) -> int | N
     if not existing:
         return None
 
-    # 2. Substring
+    # 2. Normalized exact (handles apostrophes, hyphens, etc.)
+    for eid, ename in existing:
+        if _normalize(ename) == name_norm:
+            return eid
+
+    # 3. Substring
     for eid, ename in existing:
         el = ename.lower()
         if name_lower in el or el in name_lower:
             return eid
 
-    # 3. Fuzzy
+    # 4. Fuzzy
     names_map = {ename: eid for eid, ename in existing}
     close = difflib.get_close_matches(name, list(names_map.keys()), n=1, cutoff=0.80)
     if close:
