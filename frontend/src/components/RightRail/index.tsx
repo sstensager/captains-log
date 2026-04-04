@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { fetchEntity, fetchLog } from '../../api'
 import type { Annotation, EntityDetail, LogDetail } from '../../types'
 import { colorFor } from '../../colors'
+import { relativeDate } from '../../utils/time'
+import AnnotatedText from '../AnnotatedText'
 import EntityDetailView from '../EntityDetail'
 
 const ENTITY_TYPES = ['person', 'place', 'pet', 'organization', 'event', 'thing', 'idea']
@@ -84,28 +86,39 @@ export default function RightRail({ open, selectedLogId, onClose, entityToShow, 
     <div className="w-full md:w-64 shrink-0 flex flex-col h-full bg-white border-l border-gray-200">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-        <div className="flex items-center gap-2">
-          {onBack && (
+        <div className="flex items-center gap-1.5 min-w-0">
+          {/* Mobile: single chevron, goes back one level */}
+          {selectedEntity ? (
             <button
-              onClick={onBack}
-              className="md:hidden text-gray-400 hover:text-gray-600 p-1 -ml-1"
+              onClick={() => setSelectedEntity(null)}
+              className="md:hidden text-gray-400 hover:text-gray-600 p-1 -ml-1 shrink-0"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
             </button>
-          )}
-          {selectedEntity ? (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <button
-                onClick={() => setSelectedEntity(null)}
-                className="text-gray-400 hover:text-gray-600 p-1 -ml-1 shrink-0"
-              >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          ) : onBack ? (
+            <button
+              onClick={onBack}
+              className="md:hidden text-gray-400 hover:text-gray-600 p-1 -ml-1 shrink-0"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
             </button>
-              <span className="text-sm font-medium text-gray-800 truncate">{selectedEntity.name}</span>
+          ) : null}
+
+          {/* Desktop: full breadcrumb */}
+          {selectedEntity ? (
+            <div className="hidden md:flex items-center gap-1 min-w-0 text-sm">
+              <button onClick={() => setSelectedEntity(null)} className="text-gray-400 hover:text-gray-700 shrink-0">Context</button>
+              <span className="text-gray-300">›</span>
+              <span className="font-medium text-gray-800 truncate">{selectedEntity.name}</span>
             </div>
           ) : (
-            <span className="text-sm font-medium text-gray-700">Context</span>
+            <span className="hidden md:block text-sm font-medium text-gray-700">Context</span>
           )}
+
+          {/* Mobile: title label */}
+          <span className="md:hidden text-sm font-medium text-gray-700">
+            {selectedEntity ? selectedEntity.name : 'Context'}
+          </span>
         </div>
         <button
           onClick={onClose}
@@ -117,7 +130,7 @@ export default function RightRail({ open, selectedLogId, onClose, entityToShow, 
 
       {/* Log anchor strip */}
       {log && (() => {
-        const snippet = selectedEntity ? getEntitySnippet(log.raw_text, selectedEntity.name) : null
+        const snippet = selectedEntity ? getEntitySnippet(log.raw_text.replace(/\[\[([^\]]+)\]\]|\{([^}]+)\}/g, (_, a, b) => a ?? b), selectedEntity.name) : null
         const c = selectedEntity ? colorFor(selectedEntity.type) : null
         return (
           <button
@@ -125,7 +138,7 @@ export default function RightRail({ open, selectedLogId, onClose, entityToShow, 
             className="w-full px-4 py-2 border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors text-left shrink-0 block"
           >
             <div className="text-xs text-gray-400">
-              {new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {relativeDate(log.created_at)}
             </div>
             {snippet ? (
               <div className="text-xs text-gray-600 mt-0.5 leading-relaxed">
@@ -135,7 +148,7 @@ export default function RightRail({ open, selectedLogId, onClose, entityToShow, 
               </div>
             ) : (
               <div className="text-xs text-gray-600 truncate mt-0.5">
-                {log.raw_text.split('\n').find(l => l.trim()) ?? ''}
+                <AnnotatedText text={log.raw_text.split('\n').find(l => l.trim()) ?? ''} />
               </div>
             )}
           </button>

@@ -91,6 +91,7 @@ export interface TaskOut {
   tags: string[]
   entities: TaskEntityRef[]
   log_preview: string | null
+  log_created_at: string | null
   indent: number
   section: string | null
 }

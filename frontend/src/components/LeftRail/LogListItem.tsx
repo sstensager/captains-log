@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { relativeDate } from '../../utils/time'
 import type { LogSummary } from '../../types'
+import AnnotatedText from '../AnnotatedText'
 
 interface Props {
   log: LogSummary
@@ -12,7 +13,7 @@ interface Props {
 
 export default function LogListItem({ log, active, activeTag, onClick, onTagClick }: Props) {
   const ref = useRef<HTMLButtonElement>(null)
-  const preview = log.raw_text.slice(0, 120).replace(/\n+/g, ' ')
+  const previewText = log.raw_text.replace(/\n+/g, ' ')
 
   useEffect(() => {
     if (active) ref.current?.scrollIntoView({ block: 'nearest' })
@@ -40,7 +41,7 @@ export default function LogListItem({ log, active, activeTag, onClick, onTagClic
       </div>
 
       <p className="text-sm text-gray-800 leading-snug line-clamp-2 mb-2">
-        {preview}
+        <AnnotatedText text={previewText} maxLength={120} />
       </p>
 
       {log.tags.length > 0 && (

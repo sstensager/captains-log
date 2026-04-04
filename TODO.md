@@ -33,10 +33,11 @@
 - **Mobile-responsive layout**: stacked panels, bottom tab nav, SVG chevron back buttons
 - **Mobile polish pass**: card treatment, tap targets, entity breadcrumb, log context strip with entity snippet + tap-to-navigate, tag tap → navigate to filtered log list, task overflow fix (`min-w-0`), Nodes rename
 - **Flat checklist view**: entity/tag filter → auto-switches to flat list; "Flat list / By log" toggle when filter active; section headers preserved as dividers; sidebar tags/entities scoped to current status tab; suggested + confirmed entities both included in filter matching
+- **Todo polish**: grouped view sorted reverse-chronological with relative date; section headers link to source log; mobile filter sheet (tags + entities); `<AnnotatedText>` component with entity type cache renders colored entity names in all snippet surfaces (log list, todo headers, right rail, entity excerpts); UTC timezone fix for relative dates
 
 ---
 
-## ⬅ START HERE NEXT SESSION: Quick-add + Dogfooding Feedback
+## ⬅ START HERE NEXT SESSION: Deployment (Fly.io)
 
 App is ready to dogfood. The core loop works: write logs → tap an entity/tag → see all open todos flat → check them off. Use it for a week and note friction before building more.
 

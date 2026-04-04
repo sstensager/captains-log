@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchAllTasks, patchTask } from '../../api'
 import type { TaskEntityRef, TaskOut } from '../../types'
 import { colorFor } from '../../colors'
+import { relativeDate } from '../../utils/time'
+import AnnotatedText from '../AnnotatedText'
 
 interface Props {
   onSelectLog: (id: number) => void
@@ -20,6 +22,7 @@ interface SnapshotGroup {
   key: string
   source_log_id: number | null
   log_preview: string | null
+  log_created_at: string | null
   tags: string[]
   entities: TaskEntityRef[]
   sections: SnapshotSection[]
@@ -60,6 +63,7 @@ function buildSnapshot(
         key,
         source_log_id: task.source_log_id,
         log_preview: task.log_preview,
+        log_created_at: task.log_created_at,
         tags: task.tags,
         entities: task.entities,
         sections: [],
@@ -108,6 +112,7 @@ export default function TasksPage({ onSelectLog }: Props) {
   const [searchInput, setSearchInput] = useState('')
   const [snapshotGroups, setSnapshotGroups] = useState<SnapshotGroup[]>([])
   const [viewMode, setViewMode] = useState<'flat' | 'grouped'>('grouped')
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
 
   // Keep a ref so we can rebuild the snapshot without adding tasks as a dep
   const tasksRef = useRef<TaskOut[]>([])
@@ -184,7 +189,7 @@ export default function TasksPage({ onSelectLog }: Props) {
     <div className="flex flex-col md:flex-row flex-1 min-h-0 min-w-0">
       {/* Filters — sidebar on desktop, compact top bar on mobile */}
       <div className="md:w-[220px] shrink-0 flex flex-col bg-gray-50 border-b md:border-b-0 md:border-r border-gray-200">
-        {/* Mobile: single compact row */}
+        {/* Mobile: compact row with filter button */}
         <div className="flex md:hidden items-center gap-2 px-3 py-2">
           <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs shrink-0">
             {(['open', 'done'] as StatusFilter[]).map(s => (
@@ -199,14 +204,93 @@ export default function TasksPage({ onSelectLog }: Props) {
               </button>
             ))}
           </div>
-          <input
-            type="text"
-            placeholder="Search…"
-            value={searchInput}
-            onChange={e => handleSearch(e.target.value)}
-            className="flex-1 text-sm bg-white border border-gray-200 rounded-md px-3 py-1.5 outline-none focus:border-gray-400 placeholder-gray-400"
-          />
+          <button
+            onClick={() => setMobileFilterOpen(true)}
+            className={`flex-1 flex items-center gap-1.5 text-sm border rounded-md px-3 py-1.5 text-left transition-colors ${
+              filter ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-400'
+            }`}
+          >
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h18M7 8h10M10 12h4" />
+            </svg>
+            <span className="truncate">
+              {filter ? (filter.kind === 'search' ? filter.query : filter.value) : 'Filter…'}
+            </span>
+            {filter && (
+              <span
+                onClick={e => { e.stopPropagation(); setFilter(null); setSearchInput(''); setViewMode('grouped') }}
+                className="ml-auto text-white/70 hover:text-white"
+              >×</span>
+            )}
+          </button>
         </div>
+
+        {/* Mobile: filter sheet */}
+        {mobileFilterOpen && (
+          <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/30" onClick={() => setMobileFilterOpen(false)} />
+            {/* Sheet */}
+            <div className="relative bg-white rounded-t-2xl shadow-xl flex flex-col max-h-[75vh]">
+              <div className="flex items-center gap-2 px-4 pt-4 pb-3 border-b border-gray-100">
+                <input
+                  type="text"
+                  placeholder="Search tags or people…"
+                  value={searchInput}
+                  autoFocus
+                  onChange={e => handleSearch(e.target.value)}
+                  className="flex-1 text-sm bg-gray-50 border border-gray-200 rounded-md px-3 py-2 outline-none focus:border-gray-400 placeholder-gray-400"
+                />
+                <button onClick={() => setMobileFilterOpen(false)} className="text-gray-400 text-lg px-1">✕</button>
+              </div>
+              <div className="overflow-y-auto px-4 py-3 space-y-4">
+                {allTags.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tags</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {allTags.map(tag => (
+                        <button
+                          key={tag}
+                          onClick={() => { setPill('tag', tag); setMobileFilterOpen(false) }}
+                          className={`text-sm px-3 py-1 rounded-full transition-colors ${
+                            activeTag === tag ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {allEntities.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nodes</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {allEntities.map(entity => {
+                        const c = colorFor(entity.type)
+                        const isActive = activeEntity === entity.name
+                        return (
+                          <button
+                            key={entity.name}
+                            onClick={() => { setPill('entity', entity.name); setMobileFilterOpen(false) }}
+                            className="inline-flex items-center gap-1 text-sm px-3 py-1 rounded-full border transition-opacity"
+                            style={isActive
+                              ? { backgroundColor: '#111827', borderColor: '#111827', color: '#fff' }
+                              : { backgroundColor: c.bg, borderColor: c.border, color: c.text }
+                            }
+                          >
+                            {!isActive && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />}
+                            {entity.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Desktop: full sidebar */}
         <div className="hidden md:flex flex-1 overflow-y-auto py-4 px-3 space-y-4 flex-col">
@@ -375,12 +459,13 @@ export default function TasksPage({ onSelectLog }: Props) {
                   })
                   return section.header
                     ? [
-                        <div
+                        <button
                           key={`${group.key}-s${si}`}
-                          className="px-4 py-1.5 text-xs text-gray-400 italic bg-gray-50 border-t border-gray-100"
+                          onClick={() => group.source_log_id && onSelectLog(group.source_log_id)}
+                          className="w-full px-4 py-1.5 text-xs text-gray-400 italic bg-gray-50 border-t border-gray-100 text-left hover:bg-gray-100 transition-colors"
                         >
-                          {section.header}
-                        </div>,
+                          <AnnotatedText text={section.header} />
+                        </button>,
                         ...rows,
                       ]
                     : rows
@@ -406,8 +491,13 @@ export default function TasksPage({ onSelectLog }: Props) {
                           onClick={() => group.source_log_id && onSelectLog(group.source_log_id)}
                           className="text-sm font-medium text-gray-700 hover:text-gray-900 text-left truncate block w-full"
                         >
-                          {group.log_preview}
+                          <AnnotatedText text={group.log_preview} />
                         </button>
+                      )}
+                      {group.log_created_at && (
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          {relativeDate(group.log_created_at)}
+                        </div>
                       )}
                       {(group.entities.length > 0 || group.tags.length > 0) && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
@@ -436,7 +526,7 @@ export default function TasksPage({ onSelectLog }: Props) {
                     <div key={si}>
                       {section.header && (
                         <div className="px-4 py-1.5 text-xs text-gray-400 italic bg-gray-50 border-b border-gray-100">
-                          {section.header}
+                          <AnnotatedText text={section.header} />
                         </div>
                       )}
                       <div className="divide-y divide-gray-50">

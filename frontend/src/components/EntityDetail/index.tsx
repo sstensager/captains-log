@@ -2,24 +2,11 @@ import React, { useEffect, useRef, useState } from 'react'
 import type { Annotation, EntityDetail, EntitySummary } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate } from '../../utils/time'
+import AnnotatedText from '../AnnotatedText'
 import { updateEntity, deleteEntity, mergeEntity, fetchEntities, promoteAnnotation } from '../../api'
 
 // Keep in sync with VALID_ENTITY_TYPES in server.py
 const ENTITY_TYPES = ['person', 'place', 'pet', 'organization', 'event', 'thing', 'idea']
-
-export function highlightInExcerpt(excerpt: string, name: string): React.ReactNode {
-  const idx = excerpt.toLowerCase().indexOf(name.toLowerCase())
-  if (idx === -1) return excerpt
-  return (
-    <>
-      {excerpt.slice(0, idx)}
-      <mark className="bg-yellow-100 text-yellow-900 rounded-sm px-0.5 not-italic font-medium">
-        {excerpt.slice(idx, idx + name.length)}
-      </mark>
-      {excerpt.slice(idx + name.length)}
-    </>
-  )
-}
 
 export default function EntityDetailView({
   entity,
@@ -256,7 +243,7 @@ export default function EntityDetailView({
                   )}
                 </div>
                 <div className="text-gray-700 leading-relaxed">
-                  {highlightInExcerpt(m.excerpt, entity.name)}
+                  <AnnotatedText text={m.excerpt} />
                 </div>
               </button>
             ))}

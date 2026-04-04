@@ -109,6 +109,7 @@ class TaskOut(BaseModel):
     tags: list[str] = []
     entities: list[TaskEntityRef] = []
     log_preview: Optional[str] = None
+    log_created_at: Optional[str] = None
     indent: int = 0
     section: Optional[str] = None
 
@@ -408,10 +409,10 @@ def list_tasks(log_id: Optional[int] = None):
 
     rows = con.execute("""
         SELECT t.id, t.title, t.status, t.source_log_id, l.tags, l.raw_text,
-               t.indent, t.section
+               t.indent, t.section, l.created_at
         FROM Task t
         LEFT JOIN Log l ON l.id = t.source_log_id
-        ORDER BY t.source_log_id, t.id
+        ORDER BY l.created_at DESC, t.id
     """).fetchall()
 
     # Entity name+type per log — confirmed (EntityReference) + suggested/accepted annotations
@@ -446,13 +447,14 @@ def list_tasks(log_id: Optional[int] = None):
                 )
 
     result = []
-    for task_id, title, status, source_log_id, tags_json, raw_text, indent, section in rows:
+    for task_id, title, status, source_log_id, tags_json, raw_text, indent, section, log_created_at in rows:
         tags = json.loads(tags_json or "[]")
         preview = (raw_text or "").split("\n")[0][:80] or None
         result.append(TaskOut(
             id=task_id, title=title, status=status, source_log_id=source_log_id,
             tags=tags, entities=entity_map.get(source_log_id, []),
-            log_preview=preview, indent=indent or 0, section=section,
+            log_preview=preview, log_created_at=log_created_at,
+            indent=indent or 0, section=section,
         ))
     return result
 
