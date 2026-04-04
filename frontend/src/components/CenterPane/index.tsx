@@ -13,6 +13,9 @@ const BULLET_LINE_RE = /^(\s*)([-*])\s+(.*)/
 
 // ── Entity mark with action menu ──────────────────────────────────────────────
 
+// True when the primary input is touch (no hover capability)
+const isTouch = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
+
 function EntityMark({
   displayText, entityName, type, annotationId, isLlm,
   onEntityClick, onReject, onPromote, onRelink,
@@ -48,11 +51,15 @@ function EntityMark({
 
   useEffect(() => {
     if (!open) return
-    const close = (e: MouseEvent) => {
+    const close = (e: Event) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
+    document.addEventListener('touchstart', close)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('touchstart', close)
+    }
   }, [open])
 
   const filteredRelink = relinkQuery.trim()
@@ -61,14 +68,26 @@ function EntityMark({
         .slice(0, 6)
     : []
 
+  const stopBoth = (e: React.MouseEvent | React.TouchEvent) => {
+    e.nativeEvent.stopImmediatePropagation()
+  }
+
   return (
     <span ref={ref} className="relative inline group/mark">
       <mark
-        onClick={() => { if (!open && entityName) onEntityClick(entityName) }}
+        onClick={() => {
+          // On touch: tap opens the action menu (nav is inside the menu)
+          // On desktop: tap navigates directly (▾ button opens menu on hover)
+          if (isTouch) {
+            setOpen(o => !o)
+          } else if (!open && entityName) {
+            onEntityClick(entityName)
+          }
+        }}
         style={{
           backgroundColor: c.bg,
           borderBottom: `2px ${isLlm ? 'dashed' : 'solid'} ${c.border}`,
-          cursor: entityName ? 'pointer' : 'default',
+          cursor: 'pointer',
           borderRadius: '2px',
           padding: '0 1px',
           fontStyle: 'inherit',
@@ -76,10 +95,10 @@ function EntityMark({
       >
         {displayText}
       </mark>
-      {/* Chevron trigger */}
+      {/* Chevron trigger — always visible on touch, hover-only on desktop */}
       <button
-        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
-        className="absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-gray-400 text-white text-[10px] leading-none hidden group-hover/mark:flex items-center justify-center hover:bg-gray-600 transition-colors z-10"
+        onClick={e => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
+        className={`absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-gray-400 text-white text-[10px] leading-none items-center justify-center hover:bg-gray-600 transition-colors z-10 ${isTouch ? 'flex' : 'hidden group-hover/mark:flex'}`}
         title="Actions"
       >
         ▾
@@ -87,8 +106,9 @@ function EntityMark({
       {/* Action menu */}
       {open && (
         <span
-          className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 flex flex-col py-1 min-w-max"
-          onMouseDown={e => e.nativeEvent.stopImmediatePropagation()}
+          className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 flex flex-col py-1 min-w-max max-w-[min(280px,80vw)]"
+          onMouseDown={stopBoth}
+          onTouchStart={stopBoth}
         >
           {relinking ? (
             <>
@@ -112,7 +132,7 @@ function EntityMark({
                 return (
                   <button
                     key={e.id}
-                    onMouseDown={ev => { ev.preventDefault(); onRelink(annotationId, e.name); setOpen(false) }}
+                    onClick={() => { onRelink(annotationId, e.name); setOpen(false) }}
                     className="flex items-center gap-2 px-3 py-3 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
                   >
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: ec.dot }} />
@@ -122,14 +142,14 @@ function EntityMark({
               })}
               {relinkQuery.trim() && (
                 <button
-                  onMouseDown={ev => { ev.preventDefault(); onRelink(annotationId, relinkQuery.trim()); setOpen(false) }}
+                  onClick={() => { onRelink(annotationId, relinkQuery.trim()); setOpen(false) }}
                   className={`px-3 py-3 text-xs text-left hover:bg-gray-50 text-gray-400 whitespace-nowrap italic ${filteredRelink.length > 0 ? 'border-t border-gray-100' : ''}`}
                 >
                   Create "{relinkQuery.trim()}"
                 </button>
               )}
               <button
-                onMouseDown={e => { e.preventDefault(); setRelinking(false) }}
+                onClick={() => setRelinking(false)}
                 className="px-3 py-3 text-xs text-left text-gray-300 hover:text-gray-500 border-t border-gray-100"
               >
                 ← Back
@@ -137,22 +157,31 @@ function EntityMark({
             </>
           ) : (
             <>
+              {/* On touch, "go to entity" lives inside the menu since tap opens the menu */}
+              {isTouch && entityName && (
+                <button
+                  onClick={() => { onEntityClick(entityName); setOpen(false) }}
+                  className="px-3 py-3 text-xs text-left hover:bg-gray-50 text-gray-800 font-medium whitespace-nowrap border-b border-gray-100"
+                >
+                  {entityName} →
+                </button>
+              )}
               {isLlm && (
                 <button
-                  onMouseDown={e => { e.preventDefault(); onPromote(annotationId); setOpen(false) }}
+                  onClick={() => { onPromote(annotationId); setOpen(false) }}
                   className="px-3 py-3 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
                 >
                   Link as <span className="font-mono text-blue-600">[[{displayText}]]</span>
                 </button>
               )}
               <button
-                onMouseDown={e => { e.preventDefault(); setRelinking(true) }}
-                className="px-3 py-1.5 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+                onClick={() => setRelinking(true)}
+                className="px-3 py-3 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
               >
                 Different entity…
               </button>
               <button
-                onMouseDown={e => { e.preventDefault(); onReject(annotationId); setOpen(false) }}
+                onClick={() => { onReject(annotationId); setOpen(false) }}
                 className="px-3 py-3 text-xs text-left hover:bg-gray-50 text-red-500 whitespace-nowrap"
               >
                 Remove reference
@@ -793,11 +822,11 @@ function ComposeView({
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
-      <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200 bg-white">
+      <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200 bg-white shrink-0">
         <span className="text-sm text-gray-400">{relativeDate(new Date().toISOString())}</span>
         <span className="hidden sm:block text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
       </div>
-      <div className="flex-1 flex flex-col p-4 md:p-8 min-h-0">
+      <div className="flex-1 flex flex-col p-4 md:p-8 pb-0 md:pb-0 min-h-0">
         <SmartTextarea
           value={text}
           onChange={setText}
@@ -805,21 +834,22 @@ function ComposeView({
           onCancel={onCancel}
           placeholder="What's on your mind?"
         />
-        <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-          <button
-            onClick={onCancel}
-            className="text-sm text-gray-400 hover:text-gray-700 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={submit}
-            disabled={!text.trim() || submitting}
-            className="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg disabled:opacity-40 hover:bg-gray-700 transition-colors"
-          >
-            {submitting ? 'Saving…' : 'Log it'}
-          </button>
-        </div>
+      </div>
+      {/* Action bar — outside the scroll area so it's always visible on mobile */}
+      <div className="shrink-0 flex items-center justify-between px-4 md:px-8 py-3 border-t border-gray-100 bg-white">
+        <button
+          onClick={onCancel}
+          className="text-sm text-gray-400 hover:text-gray-700 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={submit}
+          disabled={!text.trim() || submitting}
+          className="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg disabled:opacity-40 hover:bg-gray-700 transition-colors"
+        >
+          {submitting ? 'Saving…' : 'Log it'}
+        </button>
       </div>
     </div>
   )
