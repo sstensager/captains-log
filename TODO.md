@@ -1,6 +1,6 @@
 # Captain's Log — TODO
 
-*Last updated: 2026-04-01*
+*Last updated: 2026-04-02*
 
 ---
 
@@ -32,26 +32,50 @@
 - `updated_at` on Log; no-op edit short-circuits reparse
 - **Mobile-responsive layout**: stacked panels, bottom tab nav, SVG chevron back buttons
 - **Mobile polish pass**: card treatment, tap targets, entity breadcrumb, log context strip with entity snippet + tap-to-navigate, tag tap → navigate to filtered log list, task overflow fix (`min-w-0`), Nodes rename
+- **Flat checklist view**: entity/tag filter → auto-switches to flat list; "Flat list / By log" toggle when filter active; section headers preserved as dividers; sidebar tags/entities scoped to current status tab; suggested + confirmed entities both included in filter matching
 
 ---
 
-## Next Session: Make Todos Awesome
+## ⬅ START HERE NEXT SESSION: Quick-add + Dogfooding Feedback
 
-The Todos page works but isn't yet a reason to open the app. Two things would make it genuinely useful:
+App is ready to dogfood. The core loop works: write logs → tap an entity/tag → see all open todos flat → check them off. Use it for a week and note friction before building more.
 
-### 1. Entity-filtered task view (killer feature)
-**What:** "Show me all open todos mentioning Costco" — cross-log task view filtered by entity.
-**Why:** The current log-grouped layout buries the real value. Entity filter should be front-and-center, not an afterthought in the sidebar.
-**How:** The sidebar already has entity chips (from `allEntities`). Selecting one should be the primary UX, not just a filter refinement. Consider making entity/tag filter the hero of the page rather than open/done tabs.
+### Remaining Todos items
 
-### 2. Tasks → log navigation with scroll-to-task
-**What:** Tapping a task group's log source header should open that log AND scroll to / highlight the task section, not just open the top of the log.
-**Why:** Right now tapping the log title just dumps you at the top. On a long note this is disorienting.
-**How:** The log view (`CenterPane`) renders tasks as checkboxes inline. Need to: (a) pass a `focusTaskId` or `focusSection` prop to CenterPane, (b) scroll to that element after render, (c) add back navigation to return to Tasks. Back nav should be a chevron (same SVG as rest of app) in the CenterPane topbar that only appears when navigated from Tasks.
+#### 1. Quick-add todo on mobile (closes the loop)
+**What:** When a filter is active (e.g. Costco), a quick-add input at the top lets you type a new todo and hit Enter. It creates a minimal new log (e.g. "Costco" as the title + `[ ] your item`) and runs it through the parser so the entity gets linked automatically.
+**Why:** Right now adding a todo requires: navigate to logs → compose → write a note → save. That's too many taps standing in a store. The quick-add should be ≤2 taps.
+**How:**
+- `POST /logs` with a minimal raw_text like `[ ] buy coffee filters` (entity context from the active filter)
+- The parser will extract the todo and link the entity
+- New task appears immediately in the filtered view
+- Backend already handles this — it's purely a frontend addition
 
-### 3. (Smaller) Done tab UX
-**What:** "Done" tab shows fully-completed task groups. Currently a bit hard to parse since done items look the same as open ones.
-**Consider:** Greying out the whole card more aggressively, or collapsing done groups by default.
+#### 2. Tasks → log navigation with scroll-to-task (secondary)
+**What:** Tapping a task group's log source header should open that log AND scroll to the task, not just the top.
+**How:** Pass a `focusTaskId` prop to CenterPane, scroll to that element after render. Add chevron back button to return to Tasks.
+
+#### 3. (Minor) Done tab
+Done groups are hard to parse — consider greying the whole card more aggressively or collapsing by default.
+
+---
+
+## Code Cleanup (pre-production)
+
+### Backend — real bugs
+- [x] **Annotation type list in task UNION query** — fixed; now built dynamically from `_TYPE_MAP` + `VALID_ENTITY_TYPES`
+- [x] **`_row_to_annotation` fragile positional guard** — removed `len(row) > 10` check; SELECT always returns 11 columns
+
+### Backend — dead code / naming
+- [x] **`v2` suffix cleanup** — new canonical files: `db.py`, `promote.py`, `parser.py`, `schema.py`, `retrieval.py`; `_v2.py` files are now one-line compatibility stubs
+- [x] **Dead functions in `db_v2.py`** — removed `get_tasks`, `delete_task`, `get_logs`, `get_annotations_for_log`
+- [x] **`task_type` column** — removed vestigial `task_type` from `promote.py` insert; schema comment cleaned up
+- [x] **`_UI_TYPES` duplicate** — removed; call sites use `set(VALID_ENTITY_TYPES)` directly
+- [x] **Scattered `import json` / `import re`** — moved to module-level in `server.py`
+- [x] **`parse_log` naming** — renamed to `create_and_parse_log` in `parser.py`; `parser_v2.py` stub re-exports it as `parse_log` for compat
+
+### Frontend (pending audit of CenterPane / LeftRail / RightRail)
+- [ ] Full frontend pass TBD
 
 ---
 

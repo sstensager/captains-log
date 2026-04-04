@@ -4,7 +4,9 @@ Captain's Log — FastAPI backend.
 
 Start:  uvicorn server:app --reload --port 8000
 """
+import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -18,10 +20,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from dotenv import load_dotenv
 load_dotenv()
 
-from db_v2 import (
-    DB_PATH_V2, get_attributes, init_db, insert_log, rebuild_fts,
-)
-from promote_v2 import extract_todos, extract_links, promote_all_mentions, write_suggested_markers
+from db import DB_PATH, get_attributes, init_db, insert_log, rebuild_fts
+from promote import extract_todos, extract_links, promote_all_mentions, write_suggested_markers
 
 app = FastAPI(title="Captain's Log API")
 
@@ -46,8 +46,6 @@ _TYPE_MAP = {
 }
 
 VALID_ENTITY_TYPES = ["person", "place", "pet", "organization", "event", "thing", "idea"]
-
-_UI_TYPES = frozenset(VALID_ENTITY_TYPES)
 
 
 def norm_type(raw: str) -> str:
@@ -173,7 +171,8 @@ def _get_con():
 
 
 def _row_to_annotation(row) -> AnnotationOut:
-    # row: id, log_id, type, value, text_span, confidence, status, corrected_value, start_char, end_char, provenance
+    # row columns (always 11): id, log_id, type, value, text_span, confidence, status,
+    #                           corrected_value, start_char, end_char, provenance
     return AnnotationOut(
         id=row[0],
         log_id=row[1],
@@ -184,7 +183,7 @@ def _row_to_annotation(row) -> AnnotationOut:
         corrected_value=row[7],
         span_start=row[8],
         span_end=row[9],
-        provenance=row[10] if len(row) > 10 else None,
+        provenance=row[10],
     )
 
 _ANNOTATION_SELECT = """
@@ -200,11 +199,10 @@ def _annotation_types_for_log(con, log_id: int) -> list[str]:
         f"SELECT DISTINCT type FROM Annotation WHERE log_id = ? AND type IN ({raw_types})",
         (log_id,),
     ).fetchall()
-    return [norm_type(r[0]) for r in rows if norm_type(r[0]) in _UI_TYPES]
+    return [norm_type(r[0]) for r in rows if norm_type(r[0]) in set(VALID_ENTITY_TYPES)]
 
 
 def _log_summary(con, row) -> LogSummary:
-    import json
     log_id, raw_text, created_at, updated_at, source_type, tags_json = row
     return LogSummary(
         id=log_id,
@@ -237,7 +235,7 @@ def search_logs(q: str = ""):
         ).fetchall()
         return [_log_summary(con, r) for r in rows]
 
-    from retrieval_v2 import fts_search
+    from retrieval import fts_search
     results = fts_search(con, q, limit=30)
     if not results:
         return []
@@ -255,7 +253,6 @@ def search_logs(q: str = ""):
 
 @app.get("/api/logs/{log_id}", response_model=LogDetail)
 def get_log(log_id: int):
-    import json
     con = _get_con()
     row = con.execute(
         "SELECT id, raw_text, created_at, updated_at, source_type, tags FROM Log WHERE id = ?",
@@ -284,7 +281,6 @@ def get_log(log_id: int):
 
 @app.patch("/api/logs/{log_id}", response_model=LogDetail)
 def update_log(log_id: int, body: LogCreate, background_tasks: BackgroundTasks):
-    import json
     con = _get_con()
     row = con.execute("SELECT id, raw_text FROM Log WHERE id = ?", (log_id,)).fetchone()
     if not row:
@@ -332,7 +328,7 @@ def create_log(body: LogCreate, background_tasks: BackgroundTasks):
 
 def _bg_parse_and_promote(log_id: int, raw_text: str) -> None:
     """Annotate a log and promote entity mentions. Runs in a background thread."""
-    from parser_v2 import annotate_log
+    from parser import annotate_log
     con = init_db()
     try:
         extract_todos(log_id, raw_text, con)
@@ -354,8 +350,7 @@ def _bg_parse_and_promote(log_id: int, raw_text: str) -> None:
 
 def _bg_reparse(log_id: int, raw_text: str) -> None:
     """Clear and re-run full pipeline after an edit."""
-    import re as _re
-    from parser_v2 import annotate_log
+    from parser import annotate_log
     con = init_db()
     try:
         # Collect rejected names from prior non-text, non-user annotations
@@ -368,8 +363,8 @@ def _bg_reparse(log_id: int, raw_text: str) -> None:
 
         # confirmed_names: derived directly from text so {Name} and [[Name]] survive
         confirmed_names = (
-            [m.group(1).strip() for m in _re.finditer(r'\[\[([^\]]+)\]\]', raw_text)] +
-            [m.group(1).strip() for m in _re.finditer(r'\{([^}]+)\}', raw_text)]
+            [m.group(1).strip() for m in re.finditer(r'\[\[([^\]]+)\]\]', raw_text)] +
+            [m.group(1).strip() for m in re.finditer(r'\{([^}]+)\}', raw_text)]
         )
 
         con.execute("DELETE FROM EntityReference WHERE log_id = ?", (log_id,))
@@ -402,7 +397,6 @@ def _bg_reparse(log_id: int, raw_text: str) -> None:
 
 @app.get("/api/tasks", response_model=list[TaskOut])
 def list_tasks(log_id: Optional[int] = None):
-    import json as _json
     con = _get_con()
 
     if log_id is not None:
@@ -420,24 +414,40 @@ def list_tasks(log_id: Optional[int] = None):
         ORDER BY t.source_log_id, t.id
     """).fetchall()
 
-    # Entity name+type per log
+    # Entity name+type per log — confirmed (EntityReference) + suggested/accepted annotations
     log_ids = list({r[3] for r in rows if r[3]})
     entity_map: dict = {}
     if log_ids:
         ph = ",".join("?" * len(log_ids))
+        # All Annotation.type values that correspond to entities
+        _entity_ann_types = (
+            list(_TYPE_MAP.keys()) +          # candidate_person, candidate_place, ...
+            [t for t in VALID_ENTITY_TYPES]   # person, place, ... (from extract_links)
+        )
+        _ann_ph = ",".join("?" * len(_entity_ann_types))
+        seen: set = set()
         for elog_id, ename, etype in con.execute(f"""
             SELECT DISTINCT er.log_id, e.canonical_name, e.entity_type
             FROM EntityReference er
             JOIN Entity e ON e.id = er.entity_id AND e.merged_into_id IS NULL
             WHERE er.log_id IN ({ph})
-        """, log_ids).fetchall():
-            entity_map.setdefault(elog_id, []).append(
-                TaskEntityRef(name=ename, type=etype.lower())
-            )
+            UNION
+            SELECT DISTINCT a.log_id, a.value, a.type
+            FROM Annotation a
+            WHERE a.log_id IN ({ph})
+              AND a.status IN ('suggested', 'accepted')
+              AND a.type IN ({_ann_ph})
+        """, log_ids + log_ids + _entity_ann_types).fetchall():
+            key = (elog_id, ename)
+            if key not in seen:
+                seen.add(key)
+                entity_map.setdefault(elog_id, []).append(
+                    TaskEntityRef(name=ename, type=etype.lower())
+                )
 
     result = []
     for task_id, title, status, source_log_id, tags_json, raw_text, indent, section in rows:
-        tags = _json.loads(tags_json or "[]")
+        tags = json.loads(tags_json or "[]")
         preview = (raw_text or "").split("\n")[0][:80] or None
         result.append(TaskOut(
             id=task_id, title=title, status=status, source_log_id=source_log_id,
@@ -588,7 +598,6 @@ def relink_annotation(ann_id: int, body: RelinkBody, background_tasks: Backgroun
 
 def _get_log_detail(log_id: int) -> LogDetail:
     """Return a LogDetail with current annotations (pre-reparse snapshot)."""
-    import json as _json
     con = _get_con()
     row = con.execute(
         "SELECT id, raw_text, created_at, updated_at, source_type, tags FROM Log WHERE id = ?", (log_id,)
@@ -602,7 +611,7 @@ def _get_log_detail(log_id: int) -> LogDetail:
     annotations = [_row_to_annotation(r) for r in ann_rows]
     return LogDetail(
         id=row[0], raw_text=row[1], created_at=row[2], updated_at=row[3], source=row[4],
-        annotations=annotations, tags=_json.loads(row[5] or '[]'),
+        annotations=annotations, tags=json.loads(row[5] or '[]'),
     )
 
 
@@ -661,7 +670,6 @@ def get_entity(entity_name: str):
         ))
 
     # Mentions
-    import json as _json
     mention_rows = con.execute("""
         SELECT er.log_id, er.excerpt, l.created_at, l.tags
         FROM EntityReference er
@@ -670,7 +678,7 @@ def get_entity(entity_name: str):
         ORDER BY l.created_at DESC
     """, (entity_id,)).fetchall()
     mentions = [
-        MentionOut(log_id=r[0], excerpt=r[1] or "", ts=r[2], tags=_json.loads(r[3] or '[]'))
+        MentionOut(log_id=r[0], excerpt=r[1] or "", ts=r[2], tags=json.loads(r[3] or '[]'))
         for r in mention_rows
     ]
 
@@ -754,7 +762,7 @@ def patch_entity(entity_id: int, body: EntityPatch):
 
     if body.entity_type is not None:
         t = body.entity_type.strip().lower()
-        if t not in _UI_TYPES:
+        if t not in set(VALID_ENTITY_TYPES):
             raise HTTPException(status_code=400, detail=f"entity_type must be one of: {', '.join(VALID_ENTITY_TYPES)}")
         con.execute("UPDATE Entity SET entity_type = ? WHERE id = ?", (t.capitalize(), entity_id))
 
@@ -853,8 +861,8 @@ def admin_stats():
 @app.post("/api/admin/reset")
 def admin_reset():
     """Wipe the database completely."""
-    if os.path.exists(DB_PATH_V2):
-        os.remove(DB_PATH_V2)
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
     init_db()
     return {"ok": True, "message": "Database wiped."}
 
@@ -870,11 +878,11 @@ def admin_load_fixtures(background_tasks: BackgroundTasks, embeddings: bool = Fa
 
 
 def _bg_load_fixtures(with_embeddings: bool) -> None:
-    from parser_v2 import parse_log as _parse_log
+    from parser import create_and_parse_log as _parse_log
     from repopulate import load_fixture_notes
 
-    if os.path.exists(DB_PATH_V2):
-        os.remove(DB_PATH_V2)
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
     con = init_db()
 
     notes = load_fixture_notes()
@@ -886,7 +894,7 @@ def _bg_load_fixtures(with_embeddings: bool) -> None:
 
     if with_embeddings:
         from openai import OpenAI
-        from retrieval_v2 import embed_all_logs
+        from retrieval import embed_all_logs
         client = OpenAI()
         embed_all_logs(con, client)
 
@@ -902,7 +910,7 @@ def admin_embed(background_tasks: BackgroundTasks):
 
 def _bg_embed() -> None:
     from openai import OpenAI
-    from retrieval_v2 import embed_all_logs
+    from retrieval import embed_all_logs
     con = init_db()
     client = OpenAI()
     n = embed_all_logs(con, client)

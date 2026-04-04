@@ -17,9 +17,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from dotenv import load_dotenv
 load_dotenv()
 
-from db_v2 import DB_PATH_V2, init_db, rebuild_fts
-from parser_v2 import parse_log
-from promote_v2 import extract_todos, promote_all_mentions
+from db import DB_PATH, init_db, rebuild_fts
+from parser import create_and_parse_log
+from promote import extract_todos, promote_all_mentions
 
 
 def load_fixture_notes(path: str = "fixtures/demo_notes.md") -> list[str]:
@@ -43,7 +43,7 @@ def load_fixture_notes(path: str = "fixtures/demo_notes.md") -> list[str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Repopulate the v2 DB from fixture notes.")
+    parser = argparse.ArgumentParser(description="Repopulate the DB from fixture notes.")
     parser.add_argument(
         "--skip-embeddings", action="store_true",
         help="Skip embedding generation (faster dev runs)",
@@ -55,19 +55,19 @@ def main() -> None:
     args = parser.parse_args()
 
     # Wipe existing DB
-    if os.path.exists(DB_PATH_V2):
-        os.remove(DB_PATH_V2)
-        print(f"Deleted {DB_PATH_V2}")
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
+        print(f"Deleted {DB_PATH}")
 
     con = init_db()
-    print(f"Initialized fresh DB: {DB_PATH_V2}\n")
+    print(f"Initialized fresh DB: {DB_PATH}\n")
 
     # Parse all fixture notes
     notes = load_fixture_notes(args.source)
     print(f"Parsing {len(notes)} fixture notes...")
     for i, text in enumerate(notes, 1):
         print(f"  [{i:02d}/{len(notes)}] ", end="", flush=True)
-        log_id, result = parse_log(text, con)
+        log_id, result = create_and_parse_log(text, con)
         todos = extract_todos(log_id, text, con)
         print(f"log={log_id}  {len(result.mentions)} mentions  {todos['todos_created']} todos")
 
@@ -88,7 +88,7 @@ def main() -> None:
         print("\nSkipping embeddings (--skip-embeddings)")
     else:
         from openai import OpenAI
-        from retrieval_v2 import embed_all_logs
+        from retrieval import embed_all_logs
         client = OpenAI()
         print("\nGenerating embeddings...")
         new = embed_all_logs(con, client)

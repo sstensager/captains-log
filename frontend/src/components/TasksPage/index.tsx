@@ -107,6 +107,7 @@ export default function TasksPage({ onSelectLog }: Props) {
   const [filter, setFilter] = useState<ActiveFilter>(null)
   const [searchInput, setSearchInput] = useState('')
   const [snapshotGroups, setSnapshotGroups] = useState<SnapshotGroup[]>([])
+  const [viewMode, setViewMode] = useState<'flat' | 'grouped'>('grouped')
 
   // Keep a ref so we can rebuild the snapshot without adding tasks as a dep
   const tasksRef = useRef<TaskOut[]>([])
@@ -144,23 +145,32 @@ export default function TasksPage({ onSelectLog }: Props) {
     })
   }
 
-  // Derived filter options
-  const allTags = [...new Set(tasks.flatMap(t => t.tags))].sort()
+  // Derived filter options — scoped to tasks matching the current status tab
+  const statusMatchingTasks = tasks.filter(t =>
+    statusFilter === 'open' ? t.status !== 'done' : t.status === 'done'
+  )
+  const allTags = [...new Set(statusMatchingTasks.flatMap(t => t.tags))].sort()
   const allEntities = Object.values(
-    tasks.flatMap(t => t.entities).reduce<Record<string, TaskEntityRef>>((acc, e) => {
+    statusMatchingTasks.flatMap(t => t.entities).reduce<Record<string, TaskEntityRef>>((acc, e) => {
       acc[e.name] = e; return acc
     }, {})
   ).sort((a, b) => a.name.localeCompare(b.name))
 
   const handleSearch = (q: string) => {
     setSearchInput(q)
-    setFilter(q.trim() ? { kind: 'search', query: q } : null)
+    if (q.trim()) {
+      setFilter({ kind: 'search', query: q })
+      setViewMode('flat')
+    } else {
+      setFilter(null)
+      setViewMode('grouped')
+    }
   }
 
   const setPill = (kind: 'tag' | 'entity', value: string) => {
     const already = filter?.kind === kind && (filter as any).value === value
-    if (already) { setFilter(null); setSearchInput('') }
-    else { setFilter({ kind, value }); setSearchInput('') }
+    if (already) { setFilter(null); setSearchInput(''); setViewMode('grouped') }
+    else { setFilter({ kind, value }); setSearchInput(''); setViewMode('flat') }
   }
 
   // Live counts (always up-to-date even without snapshot rebuild)
@@ -227,7 +237,7 @@ export default function TasksPage({ onSelectLog }: Props) {
                 <span className="text-xs text-gray-500">{filter.kind === 'tag' ? 'Tag' : 'Entity'}:</span>
                 <span className="flex items-center gap-1 text-xs bg-gray-900 text-white px-2 py-0.5 rounded">
                   {filter.value}
-                  <button onClick={() => { setFilter(null); setSearchInput('') }} className="hover:text-gray-300 ml-0.5">×</button>
+                  <button onClick={() => { setFilter(null); setSearchInput(''); setViewMode('grouped') }} className="hover:text-gray-300 ml-0.5">×</button>
                 </span>
               </div>
             )}
@@ -282,6 +292,25 @@ export default function TasksPage({ onSelectLog }: Props) {
 
       {/* Task groups */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6">
+        {/* View mode toggle — only shown when a filter is active */}
+        {filter && (
+          <div className="flex items-center gap-2 mb-4 max-w-2xl">
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+              {(['flat', 'grouped'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`px-3 py-1.5 transition-colors ${
+                    viewMode === mode ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {mode === 'flat' ? 'Flat list' : 'By log'}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="text-sm text-gray-400">Loading…</div>
         ) : snapshotGroups.length === 0 ? (
@@ -292,10 +321,77 @@ export default function TasksPage({ onSelectLog }: Props) {
               ? 'Nothing open — switch to Done to review completed lists'
               : 'No completed lists yet'}
           </div>
+        ) : viewMode === 'flat' ? (
+          // ── Flat checklist ───────────────────────────────────────────────────
+          <div className="w-full max-w-2xl rounded-xl border bg-white shadow-sm overflow-hidden">
+            {/* Active filter chip */}
+            {filter && (filter.kind === 'entity' || filter.kind === 'tag') && (
+              <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2">
+                {filter.kind === 'entity' ? (() => {
+                  const entity = allEntities.find(e => e.name === filter.value)
+                    ?? statusMatchingTasks.flatMap(t => t.entities).find(e => e.name === filter.value)
+                  if (!entity) return <span className="text-xs text-gray-500">{filter.value}</span>
+                  const c = colorFor(entity.type)
+                  return (
+                    <span
+                      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border"
+                      style={{ backgroundColor: c.bg, borderColor: c.border, color: c.text }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
+                      {entity.name}
+                    </span>
+                  )
+                })() : (
+                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{filter.value}</span>
+                )}
+              </div>
+            )}
+            <div>
+              {snapshotGroups.flatMap(group =>
+                group.sections.flatMap((section, si) => {
+                  const rows = section.taskIds.map(id => {
+                    const task = tasks.find(t => t.id === id)
+                    if (!task) return null
+                    const done = task.status === 'done'
+                    return (
+                      <div
+                        key={id}
+                        className={`flex items-center gap-3 py-2.5 pr-4 border-t border-gray-50 transition-opacity ${done ? 'opacity-50' : ''}`}
+                        style={{ paddingLeft: `${Math.min(1 + (task.indent ?? 0) * 1.25, 4)}rem` }}
+                      >
+                        <button
+                          onClick={() => toggle(task)}
+                          className={`w-4 h-4 shrink-0 rounded border text-xs flex items-center justify-center transition-colors ${
+                            done ? 'bg-gray-900 border-gray-900 text-white' : 'border-gray-400 hover:border-gray-600'
+                          }`}
+                        >
+                          {done && '✓'}
+                        </button>
+                        <span className={`text-sm min-w-0 break-words ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                          {task.title}
+                        </span>
+                      </div>
+                    )
+                  })
+                  return section.header
+                    ? [
+                        <div
+                          key={`${group.key}-s${si}`}
+                          className="px-4 py-1.5 text-xs text-gray-400 italic bg-gray-50 border-t border-gray-100"
+                        >
+                          {section.header}
+                        </div>,
+                        ...rows,
+                      ]
+                    : rows
+                })
+              )}
+            </div>
+          </div>
         ) : (
+          // ── Grouped by log ───────────────────────────────────────────────────
           <div className="w-full max-w-2xl space-y-6">
             {snapshotGroups.map(group => {
-              // Get live task data for rendering (status may have changed)
               const taskById = (id: number) => tasks.find(t => t.id === id)
               const allTaskIds = group.sections.flatMap(s => s.taskIds)
               const openInGroup = allTaskIds.filter(id => taskById(id)?.status !== 'done').length
