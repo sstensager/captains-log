@@ -86,7 +86,10 @@ function EntityMark({
         }}
         style={{
           backgroundColor: c.bg,
-          borderBottom: `2px ${isLlm ? 'dashed' : 'solid'} ${c.border}`,
+          textDecoration: 'underline',
+          textDecorationStyle: isLlm ? 'dashed' : 'solid',
+          textDecorationColor: c.border,
+          textUnderlineOffset: '3px',
           cursor: 'pointer',
           borderRadius: '2px',
           padding: '0 1px',

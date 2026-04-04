@@ -45,7 +45,7 @@ export default function RightRail({ open, selectedLogId, onClose, entityToShow, 
 
   // Respond to external entity-click requests (e.g. from chip row)
   useEffect(() => {
-    if (entityToShow) fetchEntity(entityToShow).then(setSelectedEntity)
+    if (entityToShow) fetchEntity(entityToShow).then(setSelectedEntity).catch(() => {})
   }, [entityToShow])
 
   if (!open) return null
@@ -121,8 +121,8 @@ export default function RightRail({ open, selectedLogId, onClose, entityToShow, 
           </span>
         </div>
         <button
-          onClick={onClose}
-          className="hidden md:block text-gray-400 hover:text-gray-700 text-lg leading-none"
+          onClick={onBack ?? onClose}
+          className="text-gray-400 hover:text-gray-700 text-lg leading-none"
         >
           ×
         </button>
@@ -169,7 +169,7 @@ export default function RightRail({ open, selectedLogId, onClose, entityToShow, 
         ) : (
           <ContextPanel
             entities={entities}
-            onSelectEntity={name => fetchEntity(name).then(setSelectedEntity)}
+            onSelectEntity={name => fetchEntity(name).then(setSelectedEntity).catch(() => {})}
           />
         )}
       </div>
