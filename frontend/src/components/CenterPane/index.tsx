@@ -477,6 +477,42 @@ function SmartTextarea({
     }
   }
 
+  const insertToolbarAction = (action: 'todo' | 'bullet' | 'indent' | 'dedent') => {
+    const ta = ref.current
+    if (!ta) return
+    const { selectionStart: ss, selectionEnd: se, value: v } = ta
+    const lineStart = v.lastIndexOf('\n', ss - 1) + 1
+
+    if (action === 'indent') {
+      onChange(v.slice(0, lineStart) + '  ' + v.slice(lineStart))
+      selAfter.current = { start: ss + 2, end: se + 2 }
+      ta.focus()
+      return
+    }
+    if (action === 'dedent') {
+      const spaces = v.slice(lineStart).match(/^ {1,2}/)
+      if (spaces) {
+        const n = spaces[0].length
+        onChange(v.slice(0, lineStart) + v.slice(lineStart + n))
+        selAfter.current = { start: Math.max(lineStart, ss - n), end: Math.max(lineStart, se - n) }
+      }
+      ta.focus()
+      return
+    }
+    // todo / bullet: replace any existing prefix, add new one
+    const prefixMatch = v.slice(lineStart).match(/^(\s*)([-*]\s+|\[[ xX]?\]\s+)?/)
+    const indent = prefixMatch?.[1] ?? ''
+    const existingPrefixLen = prefixMatch?.[0].length ?? 0
+    const newPrefix = action === 'todo' ? `${indent}[ ] ` : `${indent}- `
+    const diff = newPrefix.length - existingPrefixLen
+    onChange(v.slice(0, lineStart) + newPrefix + v.slice(lineStart + existingPrefixLen))
+    selAfter.current = {
+      start: Math.max(lineStart + newPrefix.length, ss + diff),
+      end: Math.max(lineStart + newPrefix.length, se + diff),
+    }
+    ta.focus()
+  }
+
   return (
     <div className="relative flex-1 flex flex-col min-h-0">
       <textarea
@@ -487,6 +523,24 @@ function SmartTextarea({
         placeholder={placeholder}
         className={textareaClassName ?? 'flex-1 w-full resize-none outline-none text-base text-gray-800 leading-[1.8] placeholder-gray-300 bg-transparent'}
       />
+      {/* Mobile formatting toolbar — hidden on md+ where keyboard shortcuts work */}
+      <div className="flex md:hidden items-center gap-1 border-t border-gray-100 bg-white py-1 px-1 shrink-0">
+        {([
+          { label: '☐', title: 'Todo', action: 'todo' as const },
+          { label: '•', title: 'Bullet', action: 'bullet' as const },
+          { label: '⇥', title: 'Indent', action: 'indent' as const },
+          { label: '⇤', title: 'Dedent', action: 'dedent' as const },
+        ] as const).map(btn => (
+          <button
+            key={btn.action}
+            title={btn.title}
+            onMouseDown={e => { e.preventDefault(); insertToolbarAction(btn.action) }}
+            className="flex items-center justify-center w-10 h-8 rounded text-gray-500 text-base hover:bg-gray-100 active:bg-gray-200 transition-colors"
+          >
+            {btn.label}
+          </button>
+        ))}
+      </div>
       {linkQuery !== null && dropdownPos && (
         <div
           className="fixed w-72 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-50"
