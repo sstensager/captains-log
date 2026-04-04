@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Annotation, EntityDetail, EntitySummary } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate } from '../../utils/time'
