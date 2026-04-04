@@ -1,6 +1,6 @@
 # Captain's Log — TODO
 
-*Last updated: 2026-04-02*
+*Last updated: 2026-04-04*
 
 ---
 
@@ -34,16 +34,55 @@
 - **Mobile polish pass**: card treatment, tap targets, entity breadcrumb, log context strip with entity snippet + tap-to-navigate, tag tap → navigate to filtered log list, task overflow fix (`min-w-0`), Nodes rename
 - **Flat checklist view**: entity/tag filter → auto-switches to flat list; "Flat list / By log" toggle when filter active; section headers preserved as dividers; sidebar tags/entities scoped to current status tab; suggested + confirmed entities both included in filter matching
 - **Todo polish**: grouped view sorted reverse-chronological with relative date; section headers link to source log; mobile filter sheet (tags + entities); `<AnnotatedText>` component with entity type cache renders colored entity names in all snippet surfaces (log list, todo headers, right rail, entity excerpts); UTC timezone fix for relative dates
+- **Fly.io production deploy**: multi-stage Dockerfile, persistent SQLite volume, basic auth middleware, StaticFiles SPA serving, env-var config fallbacks
+- **Mobile formatting toolbar**: ☐ Todo / • Bullet / ⇥ Indent / ⇤ Dedent buttons in SmartTextarea, always visible on mobile, hidden on desktop
 
 ---
 
-## ⬅ START HERE NEXT SESSION: Deployment (Fly.io)
+## ⬅ START HERE NEXT SESSION: Mobile entity interaction + entity model bugs
 
-App is ready to dogfood. The core loop works: write logs → tap an entity/tag → see all open todos flat → check them off. Use it for a week and note friction before building more.
+App is deployed on Fly.io and in dogfooding. First real-use session revealed a cluster of mobile entity issues and entity model bugs. Work through these in priority order.
 
-### Remaining Todos items
+---
 
-#### 1. Quick-add todo on mobile (closes the loop)
+## P0 — Core loop broken on mobile
+
+#### 1. Entity mark mobile interaction redesign
+**What:** The ▾ action menu button is `hidden group-hover/mark:flex` — invisible on touch. Tapping a mark fires raw `onClick` (navigate to entity) with no way to confirm/reject/relink. This also breaks the side rail state on mobile (can't close after tapping a suggested entity).
+**Fix:** On mobile, first tap should open the action menu inline (not navigate). On desktop, keep existing hover behavior. Use a touch detection approach (e.g. `@media (hover: none)` or always-visible ▾ on small screens). Action menu should include a "Go to entity" option so navigation is still accessible.
+
+#### 2. Save button sticky on mobile
+**What:** Long notes require scrolling past the content to reach the Save button. Should be sticky at the bottom of the compose area on mobile.
+
+---
+
+## P1 — Suggested entities are second-class citizens
+
+#### 3. Suggested entities invisible in entity page + relink dropdown
+**What:** The entity browser, entity detail page, and the relink search dropdown all filter to confirmed entities only. Suggested entities should appear everywhere confirmed ones do (with a visual distinction).
+
+#### 4. Ghost duplicate after hardening a suggested entity
+**What:** After promoting a suggested → confirmed entity, both versions still appear in Nodes. The promotion flow isn't cleaning up the old suggested annotation record.
+
+#### 5. Fuzzy dedup misses apostrophe/punctuation variants
+**What:** "Ralphs" and "Ralph's" are treated as two different entities. Normalize strings (strip punctuation, lowercase) before fuzzy matching in `promote.py`.
+**Related:** Parser is not being fed existing suggested entities as context, so it can't pick the already-known name — consider passing entity names to the parse prompt.
+
+---
+
+## P2 — Editor polish
+
+#### 6. `[[` button in mobile formatting toolbar
+**What:** No way to type `[[` easily on mobile keyboard. Add a `[[` button to the formatting toolbar (same bar as ☐ / • / ⇥ / ⇤).
+
+#### 7. Multi-line block select + Tab indent/dedent
+**What:** Selecting multiple lines and pressing Tab should indent all of them. Currently only indents the current line. Should work on desktop and mobile (via toolbar buttons).
+
+---
+
+### Remaining backlog items
+
+#### 8. Quick-add todo on mobile (closes the loop)
 **What:** When a filter is active (e.g. Costco), a quick-add input at the top lets you type a new todo and hit Enter. It creates a minimal new log (e.g. "Costco" as the title + `[ ] your item`) and runs it through the parser so the entity gets linked automatically.
 **Why:** Right now adding a todo requires: navigate to logs → compose → write a note → save. That's too many taps standing in a store. The quick-add should be ≤2 taps.
 **How:**
