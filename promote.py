@@ -192,7 +192,11 @@ def promote_all_mentions(
     Auto-promote all mention annotations at or above min_confidence.
     Skips narrator name. Returns summary dict: entities_created, refs_created, skipped.
     """
-    from config import USER_NAME
+    try:
+        from config import USER_NAME
+    except ImportError:
+        import os as _os
+        USER_NAME = _os.environ.get("USER_NAME", "Steve")
 
     type_placeholders = ",".join("?" * len(MENTION_TYPE_TO_ENTITY_TYPE))
     rows = con.execute(f"""

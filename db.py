@@ -1,7 +1,10 @@
 import os
 import sqlite3
 
-from config import DB_PATH as _CONFIG_DB_PATH
+try:
+    from config import DB_PATH as _CONFIG_DB_PATH
+except ImportError:
+    _CONFIG_DB_PATH = os.environ.get("DB_PATH", "data/captain_log.db")
 
 # The on-disk database file (kept as _v2 suffix to match existing data)
 DB_PATH = _CONFIG_DB_PATH.replace(".db", "_v2.db")

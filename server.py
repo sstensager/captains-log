@@ -11,9 +11,15 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+import base64
+import secrets
+
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -24,6 +30,30 @@ from db import DB_PATH, get_attributes, init_db, insert_log, rebuild_fts
 from promote import extract_todos, extract_links, promote_all_mentions, write_suggested_markers
 
 app = FastAPI(title="Captain's Log API")
+
+# ── Basic auth (production only — skipped when BASIC_AUTH_PASSWORD is unset) ──
+
+_AUTH_PASSWORD = os.environ.get("BASIC_AUTH_PASSWORD", "")
+
+class BasicAuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if not _AUTH_PASSWORD:
+            return await call_next(request)
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Basic "):
+            try:
+                _, password = base64.b64decode(auth[6:]).decode().split(":", 1)
+                if secrets.compare_digest(password, _AUTH_PASSWORD):
+                    return await call_next(request)
+            except Exception:
+                pass
+        return Response(
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="Captain\'s Log"'},
+            content="Unauthorized",
+        )
+
+app.add_middleware(BasicAuthMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -917,3 +947,16 @@ def _bg_embed() -> None:
     client = OpenAI()
     n = embed_all_logs(con, client)
     print(f"[embed] {n} embeddings generated")
+
+
+# ── Serve built frontend (production) ─────────────────────────────────────────
+# In dev, Vite runs separately on :5173. In prod, FastAPI serves the built output.
+
+_STATIC_DIR = Path(__file__).parent / "frontend" / "dist"
+
+if _STATIC_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=_STATIC_DIR / "assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        return FileResponse(_STATIC_DIR / "index.html")

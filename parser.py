@@ -6,7 +6,10 @@ import sqlite3
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from config import USER_NAME
+try:
+    from config import USER_NAME
+except ImportError:
+    USER_NAME = os.environ.get("USER_NAME", "Steve")
 from db import insert_log, insert_annotations
 from schema import ParseResult
 

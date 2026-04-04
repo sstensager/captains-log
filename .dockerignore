@@ -1,0 +1,11 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+data/
+config.py
+_archive/
+*.ipynb
+frontend/node_modules
+frontend/.vite
+frontend/dist
