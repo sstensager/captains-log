@@ -509,11 +509,23 @@ function SmartTextarea({
     }
   }
 
-  const insertToolbarAction = (action: 'todo' | 'bullet' | 'indent' | 'dedent') => {
+  const insertToolbarAction = (action: 'link' | 'todo' | 'bullet' | 'indent' | 'dedent') => {
     const ta = ref.current
     if (!ta) return
     const { selectionStart: ss, selectionEnd: se, value: v } = ta
     const lineStart = v.lastIndexOf('\n', ss - 1) + 1
+
+    if (action === 'link') {
+      const newVal = v.slice(0, ss) + '[[]]' + v.slice(se)
+      const cursorPos = ss + 2 // place cursor between [[ and ]]
+      onChange(newVal)
+      selAfter.current = { start: cursorPos, end: cursorPos }
+      // detectLink will fire on the next render via the onChange → re-render cycle,
+      // but we also call it directly so the dropdown opens immediately
+      detectLink(newVal, cursorPos)
+      ta.focus()
+      return
+    }
 
     if (action === 'indent') {
       onChange(v.slice(0, lineStart) + '  ' + v.slice(lineStart))
@@ -558,6 +570,7 @@ function SmartTextarea({
       {/* Mobile formatting toolbar — hidden on md+ where keyboard shortcuts work */}
       <div className="flex md:hidden items-center gap-1 border-t border-gray-100 bg-white py-1 px-1 shrink-0">
         {([
+          { label: '[[]]', title: 'Link entity', action: 'link' as const },
           { label: '☐', title: 'Todo', action: 'todo' as const },
           { label: '•', title: 'Bullet', action: 'bullet' as const },
           { label: '⇥', title: 'Indent', action: 'indent' as const },
@@ -567,7 +580,7 @@ function SmartTextarea({
             key={btn.action}
             title={btn.title}
             onMouseDown={e => { e.preventDefault(); insertToolbarAction(btn.action) }}
-            className="flex items-center justify-center w-10 h-8 rounded text-gray-500 text-base hover:bg-gray-100 active:bg-gray-200 transition-colors"
+            className={`flex items-center justify-center h-8 rounded text-gray-500 hover:bg-gray-100 active:bg-gray-200 transition-colors ${btn.action === 'link' ? 'px-2 text-xs font-mono' : 'w-10 text-base'}`}
           >
             {btn.label}
           </button>
