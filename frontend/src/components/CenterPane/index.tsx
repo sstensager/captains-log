@@ -339,6 +339,60 @@ interface Props {
   onBack?: () => void
 }
 
+// ── Indent/dedent helper (single-line and multi-line block select) ────────────
+
+function applyIndent(
+  v: string, ss: number, se: number, dedent: boolean,
+): { newVal: string; newSs: number; newSe: number } {
+  const firstLineStart = v.lastIndexOf('\n', ss - 1) + 1
+  const isMultiLine = ss !== se && v.slice(ss, se).includes('\n')
+
+  if (!isMultiLine) {
+    // Single line: indent/dedent from line start
+    if (!dedent) {
+      return { newVal: v.slice(0, firstLineStart) + '  ' + v.slice(firstLineStart), newSs: ss + 2, newSe: se + 2 }
+    }
+    const spaces = v.slice(firstLineStart).match(/^ {1,2}/)
+    if (!spaces) return { newVal: v, newSs: ss, newSe: se }
+    const n = spaces[0].length
+    return {
+      newVal: v.slice(0, firstLineStart) + v.slice(firstLineStart + n),
+      newSs: Math.max(firstLineStart, ss - n),
+      newSe: Math.max(firstLineStart, se - n),
+    }
+  }
+
+  // Multi-line: apply to every line touched by the selection
+  const afterSe = v.indexOf('\n', se)
+  const regionEnd = afterSe === -1 ? v.length : afterSe
+  const before = v.slice(0, firstLineStart)
+  const region = v.slice(firstLineStart, regionEnd)
+  const after = v.slice(regionEnd)
+
+  const lines = region.split('\n')
+  let firstDelta = 0
+  let totalDelta = 0
+
+  const newLines = lines.map((line, i) => {
+    if (!dedent) {
+      if (i === 0) firstDelta = 2
+      totalDelta += 2
+      return '  ' + line
+    }
+    const spaces = line.match(/^ {1,2}/)
+    const n = spaces ? spaces[0].length : 0
+    if (i === 0) firstDelta = -n
+    totalDelta -= n
+    return n > 0 ? line.slice(n) : line
+  })
+
+  return {
+    newVal: before + newLines.join('\n') + after,
+    newSs: Math.max(firstLineStart, ss + firstDelta),
+    newSe: Math.max(firstLineStart, se + totalDelta),
+  }
+}
+
 // ── Smart textarea with [[ entity autocomplete ────────────────────────────────
 
 function SmartTextarea({
@@ -469,21 +523,12 @@ function SmartTextarea({
       return
     }
 
-    // ── Tab indent/dedent ──
+    // ── Tab indent/dedent (supports multi-line block selection) ──
     if (e.key === 'Tab') {
       e.preventDefault()
-      const lineStart = v.lastIndexOf('\n', ss - 1) + 1
-      if (!e.shiftKey) {
-        onChange(v.slice(0, lineStart) + '  ' + v.slice(lineStart))
-        selAfter.current = { start: ss + 2, end: se + 2 }
-      } else {
-        const spaces = v.slice(lineStart).match(/^ {1,2}/)
-        if (spaces) {
-          const n = spaces[0].length
-          onChange(v.slice(0, lineStart) + v.slice(lineStart + n))
-          selAfter.current = { start: Math.max(lineStart, ss - n), end: Math.max(lineStart, se - n) }
-        }
-      }
+      const { newVal, newSs, newSe } = applyIndent(v, ss, se, e.shiftKey)
+      onChange(newVal)
+      selAfter.current = { start: newSs, end: newSe }
       return
     }
 
@@ -527,19 +572,10 @@ function SmartTextarea({
       return
     }
 
-    if (action === 'indent') {
-      onChange(v.slice(0, lineStart) + '  ' + v.slice(lineStart))
-      selAfter.current = { start: ss + 2, end: se + 2 }
-      ta.focus()
-      return
-    }
-    if (action === 'dedent') {
-      const spaces = v.slice(lineStart).match(/^ {1,2}/)
-      if (spaces) {
-        const n = spaces[0].length
-        onChange(v.slice(0, lineStart) + v.slice(lineStart + n))
-        selAfter.current = { start: Math.max(lineStart, ss - n), end: Math.max(lineStart, se - n) }
-      }
+    if (action === 'indent' || action === 'dedent') {
+      const { newVal, newSs, newSe } = applyIndent(v, ss, se, action === 'dedent')
+      onChange(newVal)
+      selAfter.current = { start: newSs, end: newSe }
       ta.focus()
       return
     }
