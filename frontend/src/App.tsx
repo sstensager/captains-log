@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import LeftRail from './components/LeftRail'
 import CenterPane from './components/CenterPane'
 import RightRail from './components/RightRail'
@@ -11,6 +11,7 @@ type Page = 'logs' | 'entities' | 'tasks'
 type MobileView = 'list' | 'detail' | 'context'
 
 export default function App() {
+  const appRef = useRef<HTMLDivElement>(null)
   const [page, setPage] = useState<Page>('logs')
   const [logs, setLogs] = useState<LogSummary[]>([])
   const [loading, setLoading] = useState(true)
@@ -24,6 +25,26 @@ export default function App() {
 
   useEffect(() => {
     fetchLogs().then(data => { setLogs(data); setLoading(false) })
+  }, [])
+
+  // iOS Safari: keyboard overlays the viewport without resizing it.
+  // visualViewport gives the actual visible area; we size + translate the root
+  // element to match so toolbars stay above the keyboard.
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const update = () => {
+      const el = appRef.current
+      if (!el) return
+      el.style.height = `${vv.height}px`
+      el.style.transform = `translateY(${vv.offsetTop}px)`
+    }
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+    }
   }, [])
 
   const handleSelectLog = (id: number) => {
@@ -96,7 +117,7 @@ export default function App() {
   ]
 
   return (
-    <div className="flex flex-col h-[100dvh] overflow-hidden w-full">
+    <div ref={appRef} className="flex flex-col h-[100dvh] overflow-hidden w-full">
       {/* Top nav — desktop only */}
       <nav className="hidden md:flex shrink-0 items-center gap-1 px-4 py-2 border-b border-gray-200 bg-white">
         <span className="text-sm font-semibold text-gray-800 mr-3">Captain's Log</span>
