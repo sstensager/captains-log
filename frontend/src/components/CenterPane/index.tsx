@@ -561,12 +561,10 @@ function SmartTextarea({
     const lineStart = v.lastIndexOf('\n', ss - 1) + 1
 
     if (action === 'link') {
-      const newVal = v.slice(0, ss) + '[[]]' + v.slice(se)
-      const cursorPos = ss + 2 // place cursor between [[ and ]]
+      const newVal = v.slice(0, ss) + '[[' + v.slice(se)
+      const cursorPos = ss + 2
       onChange(newVal)
       selAfter.current = { start: cursorPos, end: cursorPos }
-      // detectLink will fire on the next render via the onChange → re-render cycle,
-      // but we also call it directly so the dropdown opens immediately
       detectLink(newVal, cursorPos)
       ta.focus()
       return
