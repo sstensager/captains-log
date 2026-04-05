@@ -96,7 +96,7 @@ export default function App() {
   ]
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden w-full">
+    <div className="flex flex-col h-[100dvh] overflow-hidden w-full">
       {/* Top nav — desktop only */}
       <nav className="hidden md:flex shrink-0 items-center gap-1 px-4 py-2 border-b border-gray-200 bg-white">
         <span className="text-sm font-semibold text-gray-800 mr-3">Captain's Log</span>
@@ -172,7 +172,7 @@ export default function App() {
       </div>
 
       {/* Bottom nav — mobile only */}
-      <nav className="md:hidden shrink-0 flex border-t border-gray-200 bg-white">
+      <nav className="md:hidden shrink-0 flex border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)]">
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
