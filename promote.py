@@ -124,27 +124,28 @@ def _normalize(s: str) -> str:
 def find_entity(con: sqlite3.Connection, name: str, entity_type: str) -> int | None:
     """
     Return entity_id if a matching entity already exists, else None.
+    Searches across ALL entity types first (type-agnostic) so a name that was
+    already confirmed under a different type is found rather than duplicated.
     Match order:
-      1. Exact (case-insensitive)
-      2. Normalized exact (strip punctuation — catches "Ralph's" == "Ralphs")
+      1. Exact (case-insensitive), any type
+      2. Normalized exact (strip punctuation — catches "Ralph's" == "Ralphs"), any type
       3. Substring: "Jen" ↔ "Jennifer", "Kirk Creek" ↔ "Kirk Creek Campground"
       4. Fuzzy (difflib, cutoff 0.80)
     """
     name_lower = name.strip().lower()
     name_norm = _normalize(name)
 
-    # 1. Exact
+    # 1. Exact — any type
     row = con.execute(
-        "SELECT id FROM Entity WHERE LOWER(canonical_name) = ? AND entity_type = ?",
-        (name_lower, entity_type),
+        "SELECT id FROM Entity WHERE LOWER(canonical_name) = ? AND merged_into_id IS NULL",
+        (name_lower,),
     ).fetchone()
     if row:
         return row[0]
 
-    # 2 & 3 & 4. Load all existing entities of this type
+    # 2 & 3 & 4. Load all existing entities (any type)
     existing = con.execute(
-        "SELECT id, canonical_name FROM Entity WHERE entity_type = ? AND merged_into_id IS NULL",
-        (entity_type,),
+        "SELECT id, canonical_name FROM Entity WHERE merged_into_id IS NULL",
     ).fetchall()
     if not existing:
         return None

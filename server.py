@@ -812,6 +812,14 @@ def patch_entity(entity_id: int, body: EntityPatch):
         if t not in set(VALID_ENTITY_TYPES):
             raise HTTPException(status_code=400, detail=f"entity_type must be one of: {', '.join(VALID_ENTITY_TYPES)}")
         con.execute("UPDATE Entity SET entity_type = ? WHERE id = ?", (t.capitalize(), entity_id))
+        # Cascade to all annotations linked via EntityReference so log view colors stay in sync
+        con.execute("""
+            UPDATE Annotation SET type = ?
+            WHERE id IN (
+                SELECT annotation_id FROM EntityReference
+                WHERE entity_id = ? AND annotation_id IS NOT NULL
+            )
+        """, (t, entity_id))
 
     con.commit()
 
