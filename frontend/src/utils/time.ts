@@ -13,7 +13,13 @@ export function relativeDate(isoString: string): string {
   const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const diffDays = Math.round((todayOnly.getTime() - dateOnly.getTime()) / 86400000)
 
-  if (diffDays === 0) return 'Today'
+  if (diffDays === 0) {
+    const diffMs = now.getTime() - date.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+    if (diffMin < 1) return 'Just now'
+    if (diffMin < 60) return `${diffMin}m ago`
+    return `${Math.floor(diffMin / 60)}h ago`
+  }
   if (diffDays === 1) return 'Yesterday'
 
   const sameYear = date.getFullYear() === now.getFullYear()

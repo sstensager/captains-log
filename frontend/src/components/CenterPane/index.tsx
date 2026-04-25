@@ -813,7 +813,7 @@ function EditView({
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
-      <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200 bg-white">
+      <div className="shrink-0 flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200 bg-white">
         <span className="hidden sm:block text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
         <div className="flex gap-2">
           <button onClick={onCancel} className="text-sm text-gray-400 hover:text-gray-700 transition-colors">Cancel</button>
