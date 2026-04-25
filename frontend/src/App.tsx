@@ -175,7 +175,7 @@ export default function App() {
               <RightRail
                 open={rightRailOpen || mobileView === 'context'}
                 selectedLogId={selectedLogId}
-                onClose={() => setRightRailOpen(false)}
+                onClose={() => { setRightRailOpen(false); setMobileView('detail') }}
                 entityToShow={entityToShow}
                 onSelectLog={handleSelectLog}
                 refreshKey={logRefreshKey}

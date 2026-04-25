@@ -121,7 +121,7 @@ export default function RightRail({ open, selectedLogId, onClose, entityToShow, 
           </span>
         </div>
         <button
-          onClick={onBack ?? onClose}
+          onClick={onClose}
           className="text-gray-400 hover:text-gray-700 text-lg leading-none"
         >
           ×
