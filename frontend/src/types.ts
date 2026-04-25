@@ -56,6 +56,7 @@ export interface AttributeOut {
 export interface MentionOut {
   log_id: number
   excerpt: string
+  raw_text: string
   ts: string
   tags: string[]
 }

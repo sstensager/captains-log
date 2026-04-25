@@ -173,6 +173,7 @@ class AttributeOut(BaseModel):
 class MentionOut(BaseModel):
     log_id: int
     excerpt: str
+    raw_text: str
     ts: str
     tags: list[str] = []
 
@@ -717,14 +718,14 @@ def get_entity(entity_name: str):
 
     # Mentions
     mention_rows = con.execute("""
-        SELECT er.log_id, er.excerpt, l.created_at, l.tags
+        SELECT er.log_id, er.excerpt, l.created_at, l.tags, l.raw_text
         FROM EntityReference er
         JOIN Log l ON l.id = er.log_id
         WHERE er.entity_id = ?
         ORDER BY l.created_at DESC
     """, (entity_id,)).fetchall()
     mentions = [
-        MentionOut(log_id=r[0], excerpt=r[1] or "", ts=r[2], tags=json.loads(r[3] or '[]'))
+        MentionOut(log_id=r[0], excerpt=r[1] or "", ts=r[2], tags=json.loads(r[3] or '[]'), raw_text=r[4] or "")
         for r in mention_rows
     ]
 

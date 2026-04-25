@@ -65,6 +65,20 @@ export default function EntityDetailView({
 
   const [savingType, setSavingType] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const copyAllLogs = () => {
+    const text = entity.mentions
+      .map(m => {
+        const date = new Date(m.ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+        return `--- ${date} ---\n${m.raw_text}`
+      })
+      .join('\n\n')
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   const changeType = async (newType: string) => {
     if (newType === entity.type || savingType) return
@@ -220,9 +234,17 @@ export default function EntityDetailView({
       {/* Mentions */}
       {entity.mentions.length > 0 && (
         <section>
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-            Appears in
-          </h3>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+              Appears in
+            </h3>
+            <button
+              onClick={copyAllLogs}
+              className="text-xs text-gray-400 hover:text-gray-700 transition-colors"
+            >
+              {copied ? 'Copied!' : 'Copy all'}
+            </button>
+          </div>
           <div className="space-y-2">
             {entity.mentions.map((m, i) => (
               <button
