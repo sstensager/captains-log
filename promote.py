@@ -350,20 +350,45 @@ def extract_links(log_id: int, raw_text: str, con: sqlite3.Connection) -> dict:
         ).fetchone():
             continue
 
-        # Get type from existing entity if possible, else default to 'person'
+        # Get or create entity so it appears on the Nodes page
         row = con.execute(
-            "SELECT entity_type FROM Entity "
+            "SELECT id, entity_type FROM Entity "
             "WHERE LOWER(canonical_name) = LOWER(?) AND merged_into_id IS NULL AND status != 'archived'",
             (name,),
         ).fetchone()
-        ann_type = row[0].lower() if row else 'person'
+        if row:
+            entity_id, entity_type_str = row[0], row[1]
+        else:
+            cur = con.execute(
+                "INSERT INTO Entity (canonical_name, entity_type, status, created_from_log_id) "
+                "VALUES (?, 'Person', 'tentative', ?)",
+                (name, log_id),
+            )
+            entity_id      = cur.lastrowid
+            entity_type_str = 'Person'
 
-        con.execute(
+        ann_type = entity_type_str.lower()
+
+        cur = con.execute(
             "INSERT INTO Annotation "
             "  (log_id, type, value, confidence, status, provenance, start_char, end_char, text_span) "
             "VALUES (?, ?, ?, 0.85, 'suggested', 'text', ?, ?, ?)",
             (log_id, ann_type, name, start_char, end_char, name),
         )
+        ann_id = cur.lastrowid
+
+        # Create EntityReference so the entity is reachable and won't be orphaned
+        if not con.execute(
+            "SELECT 1 FROM EntityReference WHERE entity_id = ? AND log_id = ? AND annotation_id = ?",
+            (entity_id, log_id, ann_id),
+        ).fetchone():
+            excerpt = clip_excerpt(raw_text, start_char, end_char)
+            con.execute(
+                "INSERT INTO EntityReference (entity_id, log_id, annotation_id, excerpt, confidence) "
+                "VALUES (?, ?, ?, ?, 0.85)",
+                (entity_id, log_id, ann_id, excerpt),
+            )
+
         created += 1
 
     con.commit()
