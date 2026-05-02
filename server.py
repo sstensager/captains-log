@@ -394,6 +394,13 @@ def _bg_reparse(log_id: int, raw_text: str) -> None:
         ).fetchall()
         rejected_names = [r[1] for r in prior if r[0] == 'rejected']
 
+        # Also include permanently suppressed names so rejected {Name} markers
+        # don't get re-suggested on future reparsing.
+        suppressed = con.execute(
+            "SELECT name FROM SuppressedSuggestion WHERE log_id = ?", (log_id,)
+        ).fetchall()
+        rejected_names = list({*rejected_names, *(r[0] for r in suppressed)})
+
         # confirmed_names: derived directly from text so {Name} and [[Name]] survive
         confirmed_names = (
             [m.group(1).strip() for m in re.finditer(r'\[\[([^\]]+)\]\]', raw_text)] +
@@ -559,6 +566,27 @@ def patch_annotation(ann_id: int, body: AnnotationPatch):
         # Cascade: remove EntityReference tied to this annotation
         con.execute("DELETE FROM EntityReference WHERE annotation_id = ?", (ann_id,))
         con.commit()
+
+        # If this is a text-provenance annotation ({Name} marker), strip it from
+        # raw_text and record a permanent suppression so future reparsing won't
+        # re-suggest the same name in this log.
+        ann_meta = con.execute(
+            "SELECT log_id, COALESCE(corrected_value, value), provenance FROM Annotation WHERE id = ?",
+            (ann_id,),
+        ).fetchone()
+        if ann_meta and ann_meta[2] == 'text' and ann_meta[1]:
+            log_id_for_ann, name_to_suppress = ann_meta[0], ann_meta[1]
+            con.execute(
+                "INSERT OR IGNORE INTO SuppressedSuggestion (log_id, name) VALUES (?, ?)",
+                (log_id_for_ann, name_to_suppress),
+            )
+            raw_row = con.execute("SELECT raw_text FROM Log WHERE id = ?", (log_id_for_ann,)).fetchone()
+            if raw_row:
+                stripped = re.sub(r'\{' + re.escape(name_to_suppress) + r'\}', name_to_suppress, raw_row[0])
+                if stripped != raw_row[0]:
+                    con.execute("UPDATE Log SET raw_text = ? WHERE id = ?", (stripped, log_id_for_ann))
+            con.commit()
+
         # Flag entities with no remaining references as orphaned
         orphan_rows = con.execute("""
             SELECT e.id FROM Entity e

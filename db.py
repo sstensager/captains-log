@@ -118,6 +118,16 @@ CREATE TABLE IF NOT EXISTS LogEmbedding (
     model      TEXT    NOT NULL DEFAULT 'text-embedding-3-small',
     created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS SuppressedSuggestion (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    log_id     INTEGER NOT NULL REFERENCES Log(id) ON DELETE CASCADE,
+    name       TEXT    NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(log_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_suppressed_log_id ON SuppressedSuggestion(log_id);
 """
 
 
