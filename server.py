@@ -492,13 +492,33 @@ def list_tasks(log_id: Optional[int] = None):
                     TaskEntityRef(name=ename, type=etype.lower())
                 )
 
+    # Flat name → (canonical_name, type) lookup for section-entity extraction
+    entity_canonical: dict[str, tuple[str, str]] = {}
+    for refs in entity_map.values():
+        for ref in refs:
+            entity_canonical[ref.name.lower()] = (ref.name, ref.type)
+
+    _section_link_re = re.compile(r'\[\[([^\]]+)\]\]')
+
     result = []
     for task_id, title, status, source_log_id, tags_json, raw_text, indent, section, log_created_at in rows:
         tags = json.loads(tags_json or "[]")
         preview = (raw_text or "").split("\n")[0][:80] or None
+
+        # If the section header contains [[entity links]], scope this task to
+        # those entities rather than inheriting every entity from the log.
+        section_entities: list[TaskEntityRef] = []
+        if section:
+            for name in _section_link_re.findall(section):
+                canonical = entity_canonical.get(name.lower())
+                if canonical:
+                    section_entities.append(TaskEntityRef(name=canonical[0], type=canonical[1]))
+
+        task_entities = section_entities if section_entities else entity_map.get(source_log_id, [])
+
         result.append(TaskOut(
             id=task_id, title=title, status=status, source_log_id=source_log_id,
-            tags=tags, entities=entity_map.get(source_log_id, []),
+            tags=tags, entities=task_entities,
             log_preview=preview, log_created_at=log_created_at,
             indent=indent or 0, section=section,
         ))
