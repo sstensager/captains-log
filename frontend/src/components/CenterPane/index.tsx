@@ -412,6 +412,7 @@ function SmartTextarea({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
   const selAfter = useRef<{ start: number; end: number } | null>(null)
+  const savedSel = useRef<{ start: number; end: number } | null>(null)
   const [entities, setEntities] = useState<EntitySummary[]>([])
   const [linkQuery, setLinkQuery] = useState<string | null>(null)
   const [linkStart, setLinkStart] = useState(0)
@@ -557,7 +558,12 @@ function SmartTextarea({
   const insertToolbarAction = (action: 'link' | 'todo' | 'bullet' | 'indent' | 'dedent') => {
     const ta = ref.current
     if (!ta) return
-    const { selectionStart: ss, selectionEnd: se, value: v } = ta
+    // Use saved selection from blur — clicking the toolbar button steals focus,
+    // causing selectionStart/End to reset before this handler runs.
+    const saved = savedSel.current
+    const ss = saved ? saved.start : ta.selectionStart
+    const se = saved ? saved.end : ta.selectionEnd
+    const v = ta.value
     const lineStart = v.lastIndexOf('\n', ss - 1) + 1
 
     if (action === 'link') {
@@ -598,6 +604,10 @@ function SmartTextarea({
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
+        onBlur={() => {
+          const ta = ref.current
+          if (ta) savedSel.current = { start: ta.selectionStart, end: ta.selectionEnd }
+        }}
         placeholder={placeholder}
         className={textareaClassName ?? 'flex-1 w-full resize-none outline-none text-base text-gray-800 leading-[1.8] placeholder-gray-300 bg-transparent'}
       />
