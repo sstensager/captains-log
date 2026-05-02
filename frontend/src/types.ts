@@ -43,6 +43,7 @@ export interface EntitySummary {
   type: string
   status: string
   ref_count: number
+  confirmed_ref_count: number
 }
 
 export interface AttributeOut {

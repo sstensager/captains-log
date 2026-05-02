@@ -37,6 +37,7 @@ interface Props {
 export default function RightRail({ open, selectedLogId, onClose, entityToShow, onSelectLog, refreshKey, onEntityMerged, onLogChanged, onBack }: Props) {
   const [log, setLog] = useState<LogDetail | null>(null)
   const [selectedEntity, setSelectedEntity] = useState<EntityDetail | null>(null)
+  const [entityError, setEntityError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!selectedLogId) { setLog(null); return }
@@ -45,7 +46,10 @@ export default function RightRail({ open, selectedLogId, onClose, entityToShow, 
 
   // Respond to external entity-click requests (e.g. from chip row)
   useEffect(() => {
-    if (entityToShow) fetchEntity(entityToShow).then(setSelectedEntity).catch(() => {})
+    if (entityToShow) {
+      setEntityError(null)
+      fetchEntity(entityToShow).then(setSelectedEntity).catch(() => setEntityError(`Couldn't load ${entityToShow}`))
+    }
   }, [entityToShow])
 
   if (!open) return null
@@ -169,7 +173,11 @@ export default function RightRail({ open, selectedLogId, onClose, entityToShow, 
         ) : (
           <ContextPanel
             entities={entities}
-            onSelectEntity={name => fetchEntity(name).then(setSelectedEntity).catch(() => {})}
+            entityError={entityError}
+            onSelectEntity={name => {
+              setEntityError(null)
+              fetchEntity(name).then(setSelectedEntity).catch(() => setEntityError(`Couldn't load ${name}`))
+            }}
           />
         )}
       </div>
@@ -179,9 +187,11 @@ export default function RightRail({ open, selectedLogId, onClose, entityToShow, 
 
 function ContextPanel({
   entities,
+  entityError,
   onSelectEntity,
 }: {
   entities: { type: string; value: string; isConfirmed: boolean }[]
+  entityError: string | null
   onSelectEntity: (name: string) => void
 }) {
   if (entities.length === 0) {
@@ -200,6 +210,9 @@ function ContextPanel({
 
   return (
     <div className="px-3 py-3 space-y-4">
+      {entityError && (
+        <p className="text-xs text-red-400 px-1">{entityError}</p>
+      )}
       {Object.entries(grouped).map(([type, items]) => {
         const c = colorFor(type)
         return (
@@ -212,6 +225,7 @@ function ContextPanel({
                 key={value}
                 onClick={() => onSelectEntity(value)}
                 className="w-full flex items-center gap-2 px-2 py-3 rounded hover:bg-gray-50 text-left"
+                style={{ touchAction: 'manipulation' }}
               >
                 {isConfirmed
                   ? <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />

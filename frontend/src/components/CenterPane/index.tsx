@@ -51,36 +51,31 @@ function EntityMark({
 
   useEffect(() => {
     if (!open) return
-    const close = (e: Event) => {
+    const close = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
-    document.addEventListener('mousedown', close)
-    document.addEventListener('touchstart', close)
-    return () => {
-      document.removeEventListener('mousedown', close)
-      document.removeEventListener('touchstart', close)
-    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
   }, [open])
 
   const filteredRelink = relinkQuery.trim()
     ? allEntities
         .filter(e => e.name.toLowerCase().includes(relinkQuery.toLowerCase()) && e.name.toLowerCase() !== entityName.toLowerCase())
+        .sort((a, b) => (b.confirmed_ref_count > 0 ? 1 : 0) - (a.confirmed_ref_count > 0 ? 1 : 0))
         .slice(0, 6)
     : []
-
-  const stopBoth = (e: React.MouseEvent | React.TouchEvent) => {
-    e.nativeEvent.stopImmediatePropagation()
-  }
 
   return (
     <span ref={ref} className="relative inline group/mark">
       <mark
         onClick={() => {
-          // On touch: tap opens the action menu (nav is inside the menu)
-          // On desktop: tap navigates directly (▾ button opens menu on hover)
+          // On touch: tap toggles the action menu (nav is inside the menu)
+          // On desktop: tap navigates; if menu is open (via chevron), close it
           if (isTouch) {
             setOpen(o => !o)
-          } else if (!open && entityName) {
+          } else if (open) {
+            setOpen(false)
+          } else if (entityName) {
             onEntityClick(entityName)
           }
         }}
@@ -106,12 +101,11 @@ function EntityMark({
       >
         ▾
       </button>
-      {/* Action menu */}
+      {/* Action menu — stop pointerdown from reaching the document outside-click handler */}
       {open && (
         <span
           className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 flex flex-col py-1 min-w-max max-w-[min(280px,80vw)]"
-          onMouseDown={stopBoth}
-          onTouchStart={stopBoth}
+          onPointerDown={e => e.nativeEvent.stopImmediatePropagation()}
         >
           {relinking ? (
             <>
@@ -132,13 +126,17 @@ function EntityMark({
               </div>
               {filteredRelink.map(e => {
                 const ec = colorFor(e.type)
+                const isConfirmedEntity = e.confirmed_ref_count > 0
                 return (
                   <button
                     key={e.id}
                     onClick={() => { onRelink(annotationId, e.name); setOpen(false) }}
                     className="flex items-center gap-2 px-3 py-3 text-xs text-left hover:bg-gray-50 text-gray-700 whitespace-nowrap"
                   >
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: ec.dot }} />
+                    {isConfirmedEntity
+                      ? <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: ec.dot }} />
+                      : <span className="w-1.5 h-1.5 rounded-full shrink-0 border" style={{ borderColor: ec.dot }} />
+                    }
                     {e.name}
                   </button>
                 )

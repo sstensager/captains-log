@@ -160,6 +160,7 @@ class EntitySummary(BaseModel):
     type: str
     status: str
     ref_count: int
+    confirmed_ref_count: int
 
 
 class AttributeOut(BaseModel):
@@ -674,15 +675,20 @@ def list_entities():
     con = _get_con()
     rows = con.execute("""
         SELECT e.id, e.canonical_name, e.entity_type, e.status,
-               COUNT(er.id) as ref_count
+               COUNT(er.id) as ref_count,
+               COUNT(CASE
+                 WHEN er.annotation_id IS NULL THEN 1
+                 WHEN a.provenance = 'user' OR a.status = 'accepted' THEN 1
+               END) as confirmed_ref_count
         FROM Entity e
         LEFT JOIN EntityReference er ON er.entity_id = e.id
+        LEFT JOIN Annotation a ON a.id = er.annotation_id
         WHERE e.merged_into_id IS NULL AND e.status != 'archived'
         GROUP BY e.id
         ORDER BY ref_count DESC, e.canonical_name
     """).fetchall()
     return [
-        EntitySummary(id=r[0], name=r[1], type=r[2].lower(), status=r[3], ref_count=r[4])
+        EntitySummary(id=r[0], name=r[1], type=r[2].lower(), status=r[3], ref_count=r[4], confirmed_ref_count=r[5])
         for r in rows
     ]
 
