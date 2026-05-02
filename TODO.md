@@ -1,6 +1,6 @@
 # Captain's Log — TODO
 
-*Last updated: 2026-04-04*
+*Last updated: 2026-05-01*
 
 ---
 
@@ -13,128 +13,78 @@
 
 ---
 
-## Recently Shipped
+## Recently Shipped (session 2026-05-01)
 
-- Single-pass LLM parser (person + place → 7 entity types, false-positive heuristics)
-- Annotation → Entity → EntityReference promotion pipeline with fuzzy dedup
-- Full-text search (SQLite FTS5)
-- React/Vite/Tailwind frontend: log list, compose, read view, right rail
-- Entity browser with type filter + entity detail (rename, notes, merge, archive)
-- Tags: LLM extracts 1–4 labels per note, filterable everywhere
-- Todos: `[ ]`/`[x]` extraction → Task rows + live checkboxes in note view
-- Todos page: grouped by source note, section headers, indentation, tag+entity filter, open/done tabs
-- Note editing: smart textarea (Tab indent/dedent, bullet/todo auto-continue, `[[` autocomplete)
-- Bullet rendering in read view
-- Three-tier annotation model: suggested (LLM) → `{Name}` (persistent soft marker) → `[[Name]]` (confirmed)
-- Inline entity marks with `▾` action menu: confirm, reject, relink to different entity
-- Suggested vs. confirmed visual distinction (dashed/solid underline, hollow/filled dot)
-- Entity management: create, rename, notes, merge, archive, type correction
-- `updated_at` on Log; no-op edit short-circuits reparse
-- **Mobile-responsive layout**: stacked panels, bottom tab nav, SVG chevron back buttons
-- **Mobile polish pass**: card treatment, tap targets, entity breadcrumb, log context strip with entity snippet + tap-to-navigate, tag tap → navigate to filtered log list, task overflow fix (`min-w-0`), Nodes rename
-- **Flat checklist view**: entity/tag filter → auto-switches to flat list; "Flat list / By log" toggle when filter active; section headers preserved as dividers; sidebar tags/entities scoped to current status tab; suggested + confirmed entities both included in filter matching
-- **Todo polish**: grouped view sorted reverse-chronological with relative date; section headers link to source log; mobile filter sheet (tags + entities); `<AnnotatedText>` component with entity type cache renders colored entity names in all snippet surfaces (log list, todo headers, right rail, entity excerpts); UTC timezone fix for relative dates
-- **Fly.io production deploy**: multi-stage Dockerfile, persistent SQLite volume, basic auth middleware, StaticFiles SPA serving, env-var config fallbacks
-- **Mobile formatting toolbar**: ☐ Todo / • Bullet / ⇥ Indent / ⇤ Dedent buttons in SmartTextarea, always visible on mobile, hidden on desktop
+- **"Copy all logs" on entity detail** — button in "Appears in" section copies all full log texts formatted as `--- date ---\ncontent` blocks; `raw_text` now included in `MentionOut`
+- **Relative time for today's logs** — `relativeDate` now returns "2h ago" / "30m ago" / "Just now" instead of "Today"
+- **Sticky save bar in EditView** — added `shrink-0` so save button doesn't get squeezed off screen when keyboard is up on mobile
+- **Context pane X button fixed** — `onBack ?? onClose` always resolved to `onBack`; X now always calls `onClose` (which also resets mobile view state)
+- **Entity type dedup fix** — `find_entity` was filtering `WHERE entity_type = ?`, causing "Ralphs" (Place) and "Ralphs" (Organization) to create two separate entities. Now searches all types; existing entity wins regardless of type mismatch
+- **Entity type cascade** — changing entity type on the Nodes page now cascades to all linked `Annotation` rows so log view highlight colors stay in sync
+- **Suggested `{Name}` entities now appear on Nodes page** — `extract_links` was creating Annotation records for soft links but no Entity or EntityReference; now creates both, so all `{Name}` entities are visible in the browser
+- **Fly.io deploy pipeline documented** — `flyctl deploy` from project root; documented in CLAUDE.md and memory
 
 ---
 
-## ⬅ START HERE NEXT SESSION: Mobile entity interaction + entity model bugs
+## ⬅ START HERE NEXT SESSION
 
-App is deployed on Fly.io and in dogfooding. First real-use session revealed a cluster of mobile entity issues and entity model bugs. Work through these in priority order.
+### P0 — Editor bugs
 
----
+#### 1. Todo insertion cursor jump
+**Steps to reproduce:**
+1. Type a line of text
+2. Add 2–3 empty lines below it
+3. Type another line of text further down
+4. Go back to the first line
+5. Use the ☐ toolbar button (or keyboard) to insert a todo on the line below it
+**Result:** Cursor jumps to the next line that has text and inserts the todo prefix before it instead of on the blank line below the first line.
 
-## P0 — Core loop broken on mobile
-
-#### 1. Entity mark mobile interaction redesign
-**What:** The ▾ action menu button is `hidden group-hover/mark:flex` — invisible on touch. Tapping a mark fires raw `onClick` (navigate to entity) with no way to confirm/reject/relink. This also breaks the side rail state on mobile (can't close after tapping a suggested entity).
-**Fix:** On mobile, first tap should open the action menu inline (not navigate). On desktop, keep existing hover behavior. Use a touch detection approach (e.g. `@media (hover: none)` or always-visible ▾ on small screens). Action menu should include a "Go to entity" option so navigation is still accessible.
-
-#### 2. Save button sticky on mobile
-**What:** Long notes require scrolling past the content to reach the Save button. Should be sticky at the bottom of the compose area on mobile.
-
----
-
-## P1 — Suggested entities are second-class citizens
-
-#### 3. Suggested entities invisible in entity page + relink dropdown
-**What:** The entity browser, entity detail page, and the relink search dropdown all filter to confirmed entities only. Suggested entities should appear everywhere confirmed ones do (with a visual distinction).
-
-#### 4. Ghost duplicate after hardening a suggested entity
-**What:** After promoting a suggested → confirmed entity, both versions still appear in Nodes. The promotion flow isn't cleaning up the old suggested annotation record.
-
-#### 5. Fuzzy dedup misses apostrophe/punctuation variants
-**What:** "Ralphs" and "Ralph's" are treated as two different entities. Normalize strings (strip punctuation, lowercase) before fuzzy matching in `promote.py`.
-**Related:** Parser is not being fed existing suggested entities as context, so it can't pick the already-known name — consider passing entity names to the parse prompt.
+#### 2. Entity action menu won't close when tapping another entity
+**Steps to reproduce:**
+1. On desktop, click a confirmed entity `[[Name]]` — action menu opens
+2. Try clicking elsewhere or another entity
+**Result:** Menu stays open; clicking another entity doesn't close the first menu and may not open the second
+**Note:** The X button close bug is fixed; this is a separate issue in `EntityMark`'s outside-click handler
 
 ---
 
-## P2 — Editor polish
+### P1 — Suggested entity UX
 
-#### 6. `[[` button in mobile formatting toolbar
-**What:** No way to type `[[` easily on mobile keyboard. Add a `[[` button to the formatting toolbar (same bar as ☐ / • / ⇥ / ⇤).
+#### 3. Removing `{suggested entity}` leaves `{}` in text
+**What:** When you hit "Remove reference" on a `{Name}` entity mark, the annotation is rejected but the `{Name}` braces stay in the raw text as literal `{Name}`.
+**Why skipped:** Stripping the `{}` requires saving new text, which triggers a full reparse, which re-annotates the entity and puts `{}` back. Needs a "permanently suppress this suggestion in this log" mechanism server-side.
 
-#### 7. Multi-line block select + Tab indent/dedent
-**What:** Selecting multiple lines and pressing Tab should indent all of them. Currently only indents the current line. Should work on desktop and mobile (via toolbar buttons).
+#### 4. Ghost duplicate after confirming a suggested entity
+**What:** After promoting a suggested `{Name}` → confirmed `[[Name]]`, both versions sometimes still appear simultaneously in Nodes and in the log view.
+**Suspected cause:** The old suggested annotation record isn't fully cleaned up during promotion.
 
----
-
-### Remaining backlog items
-
-#### 8. Quick-add todo on mobile (closes the loop)
-**What:** When a filter is active (e.g. Costco), a quick-add input at the top lets you type a new todo and hit Enter. It creates a minimal new log (e.g. "Costco" as the title + `[ ] your item`) and runs it through the parser so the entity gets linked automatically.
-**Why:** Right now adding a todo requires: navigate to logs → compose → write a note → save. That's too many taps standing in a store. The quick-add should be ≤2 taps.
-**How:**
-- `POST /logs` with a minimal raw_text like `[ ] buy coffee filters` (entity context from the active filter)
-- The parser will extract the todo and link the entity
-- New task appears immediately in the filtered view
-- Backend already handles this — it's purely a frontend addition
-
-#### 2. Tasks → log navigation with scroll-to-task (secondary)
-**What:** Tapping a task group's log source header should open that log AND scroll to the task, not just the top.
-**How:** Pass a `focusTaskId` prop to CenterPane, scroll to that element after render. Add chevron back button to return to Tasks.
-
-#### 3. (Minor) Done tab
-Done groups are hard to parse — consider greying the whole card more aggressively or collapsing by default.
+#### 5. Suggested entities should behave like confirmed in relink dropdown
+**What:** When using "Different entity…" in the action menu, the search only surfaces confirmed entities. Suggested (tentative) entities should also appear.
 
 ---
 
-## Code Cleanup (pre-production)
+### P2 — Mobile polish
 
-### Backend — real bugs
-- [x] **Annotation type list in task UNION query** — fixed; now built dynamically from `_TYPE_MAP` + `VALID_ENTITY_TYPES`
-- [x] **`_row_to_annotation` fragile positional guard** — removed `len(row) > 10` check; SELECT always returns 11 columns
+#### 6. Wrap selected word in `[[brackets]]` on mobile
+**What:** On desktop, selecting text and pressing `[` wraps it as `[[selection]]`. On mobile there's no equivalent — the `[[]]` toolbar button just inserts at cursor. Need a way to wrap a selected word.
+**Possible approach:** If the toolbar `[[]]` button is tapped with a selection active, wrap the selection instead of inserting at cursor.
 
-### Backend — dead code / naming
-- [x] **`v2` suffix cleanup** — new canonical files: `db.py`, `promote.py`, `parser.py`, `schema.py`, `retrieval.py`; `_v2.py` files are now one-line compatibility stubs
-- [x] **Dead functions in `db_v2.py`** — removed `get_tasks`, `delete_task`, `get_logs`, `get_annotations_for_log`
-- [x] **`task_type` column** — removed vestigial `task_type` from `promote.py` insert; schema comment cleaned up
-- [x] **`_UI_TYPES` duplicate** — removed; call sites use `set(VALID_ENTITY_TYPES)` directly
-- [x] **Scattered `import json` / `import re`** — moved to module-level in `server.py`
-- [x] **`parse_log` naming** — renamed to `create_and_parse_log` in `parser.py`; `parser_v2.py` stub re-exports it as `parse_log` for compat
+#### 7. Vertical scrolling to reach tabs / edit buttons on mobile
+**What:** On longer notes, tabs and the Edit button require a lot of scrolling to reach.
 
-### Frontend (pending audit of CenterPane / LeftRail / RightRail)
-- [ ] Full frontend pass TBD
+#### 8. Auto-scroll when entering a new bullet below the fold
+**What:** Typing a new bullet point below the visible area doesn't always scroll the textarea to keep the cursor in view on mobile.
 
 ---
 
-## Deployment (after Todos)
+### P3 — Features
 
-- [ ] **Fly.io deploy** — FastAPI + built frontend in one container, SQLite on persistent volume, `yourapp.fly.dev` URL
-  - `fly launch` → set up `fly.toml`, Dockerfile
-  - Mount persistent volume at `/data` for SQLite
-  - `npm run build` output served as static files by FastAPI (`StaticFiles`)
-  - Set `ANTHROPIC_API_KEY` as a Fly secret
-- [ ] **Basic auth** — single shared password via FastAPI middleware; no per-user accounts yet
-- [ ] **Timeline / journal view** — group log list by today / yesterday / this week / last week (pure frontend, data already there)
+#### 9. Smart paste for bullets / lists
+**What:** Pasting multi-line text from another app (e.g. a shopping list) doesn't preserve bullet or indentation formatting.
 
----
-
-## Bigger / Needs Design
-
-- [ ] **Slide-out nav drawer** — log list as a persistent drawer (Notion/Logseq style); tapping Logs tab when already on Logs opens it; replaces current mobile "list → detail" stacking
-- [ ] **Entity split** — when one name maps to two real people/places, split mentions into separate entities; defer until it's a real pain point
+#### 10. Navigate from context pane → entity node page
+**What:** No direct link from an entity in the context pane to its full node page. Currently requires closing context, opening Nodes, searching.
+**Open design question:** Consider killing the context pane entirely and having entity taps navigate directly to the node page (log breadcrumb provides the back path).
 
 ---
 
@@ -143,15 +93,17 @@ Done groups are hard to parse — consider greying the whole card more aggressiv
 ### Editor / Note View
 - [ ] WYSIWYG editor (Lexical) — checkboxes clickable while editing, entity highlights as you type
 - [ ] Visually connect todos to their section title
+- [ ] Quick-add todo on mobile: when a filter is active, ≤2 taps to add a new todo to a filtered entity/tag
 
 ### Entities
 - [ ] Alias table — `EntityAlias(entity_id, alias_name)`; rename creates alias; old notes stay linked
-- [ ] Reconcile — re-run entity matching (no LLM) after rename/merge/alias
 - [ ] Date extraction — detect "last Tuesday", "March 15th" as time references
-
-### Infrastructure / Later
 - [ ] Natural language query ("what did we think about Kirk Creek?")
 - [ ] Semantic search (LogEmbedding table exists, not wired to UI)
+
+### Infrastructure / Later
 - [ ] Voice input — Whisper → same parse path as text
-- [ ] Multi-user / spaces — shared entity graph with private + shared note spaces
-- [ ] Supabase / Postgres migration (when SQLite stops being enough)
+- [ ] Timeline / journal view — group log list by today / yesterday / this week / last week
+- [ ] Slide-out nav drawer (Notion/Logseq style)
+- [ ] Multi-user / spaces
+- [ ] Supabase / Postgres migration
