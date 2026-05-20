@@ -436,10 +436,10 @@ function SmartTextarea({
   })
 
   const filtered = useMemo(() => {
-    if (linkQuery === null) return []
+    if (linkQuery === null || !linkQuery.trim()) return []
     return entities
       .filter(e => e.name.toLowerCase().includes(linkQuery.toLowerCase()))
-      .slice(0, 8)
+      .slice(0, 20)
   }, [linkQuery, entities])
 
   const detectLink = (val: string, pos: number) => {
@@ -572,11 +572,20 @@ function SmartTextarea({
     const lineStart = v.lastIndexOf('\n', ss - 1) + 1
 
     if (action === 'link') {
-      const newVal = v.slice(0, ss) + '[[' + v.slice(se)
-      const cursorPos = ss + 2
-      onChange(newVal)
-      selAfter.current = { start: cursorPos, end: cursorPos }
-      detectLink(newVal, cursorPos)
+      if (ss !== se) {
+        const selected = v.slice(ss, se)
+        const newVal = v.slice(0, ss) + '[[' + selected + ']]' + v.slice(se)
+        const newPos = ss + selected.length + 4
+        onChange(newVal)
+        setLinkQuery(null)
+        selAfter.current = { start: newPos, end: newPos }
+      } else {
+        const newVal = v.slice(0, ss) + '[[' + v.slice(se)
+        const cursorPos = ss + 2
+        onChange(newVal)
+        selAfter.current = { start: cursorPos, end: cursorPos }
+        detectLink(newVal, cursorPos)
+      }
       ta.focus()
       return
     }
@@ -647,24 +656,26 @@ function SmartTextarea({
             <span className="text-xs text-gray-400 font-mono">{`[[${linkQuery}`}</span>
             <span className="text-xs text-gray-300 ml-1">↑↓ navigate · ↵ select · Esc dismiss</span>
           </div>
-          {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-gray-400 italic">
-              {linkQuery.trim() ? `Create new: [[${linkQuery.trim()}]]` : 'Type to search…'}
-            </div>
-          ) : filtered.map((e, i) => {
-            const c = colorFor(e.type)
-            return (
-              <button
-                key={e.id}
-                onMouseDown={ev => { ev.preventDefault(); insertLink(e.name) }}
-                className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors ${i === hlIdx ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
-                <span className="flex-1 truncate text-gray-800">{e.name}</span>
-                <span className="text-xs text-gray-400 shrink-0">{e.type}</span>
-              </button>
-            )
-          })}
+          <div className="overflow-y-auto max-h-60">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-gray-400 italic">
+                {linkQuery.trim() ? `Create new: [[${linkQuery.trim()}]]` : 'Type to search…'}
+              </div>
+            ) : filtered.map((e, i) => {
+              const c = colorFor(e.type)
+              return (
+                <button
+                  key={e.id}
+                  onMouseDown={ev => { ev.preventDefault(); insertLink(e.name) }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors ${i === hlIdx ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
+                  <span className="flex-1 truncate text-gray-800">{e.name}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{e.type}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -1083,13 +1094,7 @@ export default function CenterPane({
 
   const rejectAnnotations = (ids: number[]) => {
     Promise.all(ids.map(id => patchAnnotation(id, 'rejected'))).then(() => {
-      setLog(prev => prev ? {
-        ...prev,
-        annotations: prev.annotations.map(ann =>
-          ids.includes(ann.id) ? { ...ann, status: 'rejected' } : ann
-        ),
-      } : null)
-      setPendingReject(null)
+      if (log) fetchLog(log.id).then(data => { setLog(data); setPendingReject(null) })
     })
   }
 

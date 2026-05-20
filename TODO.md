@@ -1,6 +1,6 @@
 # Captain's Log — TODO
 
-*Last updated: 2026-05-01*
+*Last updated: 2026-05-20*
 
 ---
 
@@ -10,6 +10,18 @@
 - "What did we think about the campsites at Kirk Creek?"
 - "What are Beth's kids' names?"
 - "What did we order last time at Osteria Mozza?"
+
+---
+
+## Recently Shipped (session 2026-05-20)
+
+- **Todo insertion cursor jump fixed** — inserting a todo on a blank line below existing text no longer jumps to the next text line
+- **Entity action menu closes correctly** — clicking another `[[entity]]` or elsewhere on desktop now closes the open action menu
+- **`{suggested entity}` braces clear immediately on reject** — frontend now re-fetches log text after rejection instead of waiting for a manual refresh
+- **`[[]]` toolbar button wraps selection on mobile** — tapping with a word selected wraps it as `[[word]]` instead of deleting it and opening the entity picker
+- **Entity picker is now searchable** — empty `[[` shows "Type to search…" instead of 8 random entities; results capped at 20 in a scrollable list
+- **Ghost duplicate after confirming suggested entity** — confirmed; can't reproduce, fixed by prior session
+- **Suggested entities appear in relink dropdown** — confirmed working
 
 ---
 
@@ -28,61 +40,26 @@
 
 ## ⬅ START HERE NEXT SESSION
 
-### P0 — Editor bugs
-
-#### 1. Todo insertion cursor jump
-**Steps to reproduce:**
-1. Type a line of text
-2. Add 2–3 empty lines below it
-3. Type another line of text further down
-4. Go back to the first line
-5. Use the ☐ toolbar button (or keyboard) to insert a todo on the line below it
-**Result:** Cursor jumps to the next line that has text and inserts the todo prefix before it instead of on the blank line below the first line.
-
-#### 2. Entity action menu won't close when tapping another entity
-**Steps to reproduce:**
-1. On desktop, click a confirmed entity `[[Name]]` — action menu opens
-2. Try clicking elsewhere or another entity
-**Result:** Menu stays open; clicking another entity doesn't close the first menu and may not open the second
-**Note:** The X button close bug is fixed; this is a separate issue in `EntityMark`'s outside-click handler
-
----
-
-### P1 — Suggested entity UX
-
-#### 3. Removing `{suggested entity}` leaves `{}` in text
-**What:** When you hit "Remove reference" on a `{Name}` entity mark, the annotation is rejected but the `{Name}` braces stay in the raw text as literal `{Name}`.
-**Why skipped:** Stripping the `{}` requires saving new text, which triggers a full reparse, which re-annotates the entity and puts `{}` back. Needs a "permanently suppress this suggestion in this log" mechanism server-side.
-
-#### 4. Ghost duplicate after confirming a suggested entity
-**What:** After promoting a suggested `{Name}` → confirmed `[[Name]]`, both versions sometimes still appear simultaneously in Nodes and in the log view.
-**Suspected cause:** The old suggested annotation record isn't fully cleaned up during promotion.
-
-#### 5. Suggested entities should behave like confirmed in relink dropdown
-**What:** When using "Different entity…" in the action menu, the search only surfaces confirmed entities. Suggested (tentative) entities should also appear.
-
----
-
 ### P2 — Mobile polish
 
-#### 6. Wrap selected word in `[[brackets]]` on mobile
-**What:** On desktop, selecting text and pressing `[` wraps it as `[[selection]]`. On mobile there's no equivalent — the `[[]]` toolbar button just inserts at cursor. Need a way to wrap a selected word.
-**Possible approach:** If the toolbar `[[]]` button is tapped with a selection active, wrap the selection instead of inserting at cursor.
+#### 4. Entity picker needs search / filter
+**What:** The `[[` autocomplete dropdown (triggered by typing `[[` or tapping the toolbar button) shows all entities unfiltered. With hundreds of entities this becomes unusable.
+**Note:** On desktop, typing after `[[` already filters — the gap is the initial state and mobile where you may not have a keyboard ready. A search input inside the dropdown would fix both.
 
-#### 7. Vertical scrolling to reach tabs / edit buttons on mobile
+#### 5. Vertical scrolling to reach tabs / edit buttons on mobile
 **What:** On longer notes, tabs and the Edit button require a lot of scrolling to reach.
 
-#### 8. Auto-scroll when entering a new bullet below the fold
+#### 6. Auto-scroll when entering a new bullet below the fold
 **What:** Typing a new bullet point below the visible area doesn't always scroll the textarea to keep the cursor in view on mobile.
 
 ---
 
 ### P3 — Features
 
-#### 9. Smart paste for bullets / lists
+#### 7. Smart paste for bullets / lists
 **What:** Pasting multi-line text from another app (e.g. a shopping list) doesn't preserve bullet or indentation formatting.
 
-#### 10. Navigate from context pane → entity node page
+#### 8. Navigate from context pane → entity node page
 **What:** No direct link from an entity in the context pane to its full node page. Currently requires closing context, opening Nodes, searching.
 **Open design question:** Consider killing the context pane entirely and having entity taps navigate directly to the node page (log breadcrumb provides the back path).
 
