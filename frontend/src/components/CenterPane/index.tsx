@@ -800,7 +800,7 @@ function EditAnnotationBar({
   if (chips.length === 0) return null
 
   return (
-    <div className="flex items-center gap-2 px-6 py-2 border-b border-amber-100 bg-amber-50/40">
+    <div className="hidden md:flex items-center gap-2 px-6 py-2 border-b border-amber-100 bg-amber-50/40">
       <span className="text-xs text-gray-400 shrink-0">Detected:</span>
       <div className="flex flex-wrap gap-1.5">
         {chips.map(({ name, type, id }) => (

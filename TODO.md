@@ -1,6 +1,6 @@
 # Captain's Log — TODO
 
-*Last updated: 2026-05-20*
+*Last updated: 2026-05-20 (session 2)*
 
 ---
 
@@ -22,6 +22,10 @@
 - **Entity picker is now searchable** — empty `[[` shows "Type to search…" instead of 8 random entities; results capped at 20 in a scrollable list
 - **Ghost duplicate after confirming suggested entity** — confirmed; can't reproduce, fixed by prior session
 - **Suggested entities appear in relink dropdown** — confirmed working
+- **Edit button sticky on mobile** — `min-h-0` + `shrink-0` on TopBar fix scroll containment so Edit button stays fixed at top
+- **Bottom nav hidden while editing/composing** — nav tabs no longer visible (or eating space) while keyboard is up in edit mode
+- **"Detected" chip bar hidden on mobile** — desktop-only now; preserves editing space on phone
+- **Auto-scroll cursor when adding new line** — `useLayoutEffect` scrolls textarea to keep cursor in view after bullet/todo continuation
 
 ---
 
@@ -42,15 +46,8 @@
 
 ### P2 — Mobile polish
 
-#### 4. Entity picker needs search / filter
-**What:** The `[[` autocomplete dropdown (triggered by typing `[[` or tapping the toolbar button) shows all entities unfiltered. With hundreds of entities this becomes unusable.
-**Note:** On desktop, typing after `[[` already filters — the gap is the initial state and mobile where you may not have a keyboard ready. A search input inside the dropdown would fix both.
-
-#### 5. Vertical scrolling to reach tabs / edit buttons on mobile
-**What:** On longer notes, tabs and the Edit button require a lot of scrolling to reach.
-
-#### 6. Auto-scroll when entering a new bullet below the fold
-**What:** Typing a new bullet point below the visible area doesn't always scroll the textarea to keep the cursor in view on mobile.
+#### 6. General textarea scroll while typing
+**What:** Beyond the new-line case, the textarea doesn't always keep the cursor in view while typing normally on mobile (the "editing madness" in testing). May need a broader scroll-to-cursor approach beyond the current `useLayoutEffect` fix.
 
 ---
 
