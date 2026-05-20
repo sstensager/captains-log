@@ -600,9 +600,12 @@ function SmartTextarea({
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        onBlur={() => {
-          const ta = ref.current
-          if (ta) savedSel.current = { start: ta.selectionStart, end: ta.selectionEnd }
+        onSelect={(e) => {
+          const ta = e.currentTarget
+          savedSel.current = { start: ta.selectionStart, end: ta.selectionEnd }
+        }}
+        onBlur={(e) => {
+          savedSel.current = { start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd }
         }}
         placeholder={placeholder}
         className={textareaClassName ?? 'flex-1 w-full resize-none outline-none text-base text-gray-800 leading-[1.8] placeholder-gray-300 bg-transparent'}
