@@ -61,8 +61,17 @@ function EntityMark({
   const filteredRelink = relinkQuery.trim()
     ? allEntities
         .filter(e => e.name.toLowerCase().includes(relinkQuery.toLowerCase()) && e.name.toLowerCase() !== entityName.toLowerCase())
-        .sort((a, b) => (b.confirmed_ref_count > 0 ? 1 : 0) - (a.confirmed_ref_count > 0 ? 1 : 0))
-        .slice(0, 6)
+        .sort((a, b) => {
+          const q = relinkQuery.toLowerCase()
+          const aName = a.name.toLowerCase()
+          const bName = b.name.toLowerCase()
+          // Sort by match quality: exact > starts-with > contains; then confirmed > tentative
+          const matchScore = (n: string) => n === q ? 2 : n.startsWith(q) ? 1 : 0
+          const diff = matchScore(bName) - matchScore(aName)
+          if (diff !== 0) return diff
+          return (b.confirmed_ref_count > 0 ? 1 : 0) - (a.confirmed_ref_count > 0 ? 1 : 0)
+        })
+        .slice(0, 8)
     : []
 
   return (

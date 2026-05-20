@@ -241,8 +241,8 @@ def promote_all_mentions(
 
         entity_id = find_entity(con, name, entity_type)
         existing_ref = con.execute(
-            "SELECT id FROM EntityReference WHERE entity_id = ? AND annotation_id = ?",
-            (entity_id, ann_id),
+            "SELECT id FROM EntityReference WHERE entity_id = ? AND log_id = ?",
+            (entity_id, log_id),
         ).fetchone()
         if existing_ref:
             skipped += 1
