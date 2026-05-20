@@ -635,7 +635,7 @@ function SmartTextarea({
           savedSel.current = { start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd }
         }}
         placeholder={placeholder}
-        className={textareaClassName ?? 'flex-1 w-full resize-none outline-none text-base text-gray-800 leading-[1.8] placeholder-gray-300 bg-transparent'}
+        className={textareaClassName ?? 'flex-1 w-full resize-none outline-none overflow-y-scroll text-base text-gray-800 leading-[1.8] placeholder-gray-300 bg-transparent'}
       />
       {/* Mobile formatting toolbar — hidden on md+ where keyboard shortcuts work */}
       <div className="flex md:hidden items-center gap-1 border-t border-gray-100 bg-white py-1 px-1 shrink-0">
@@ -850,7 +850,7 @@ function EditView({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0">
       <div className="shrink-0 flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200 bg-white">
         <span className="hidden sm:block text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
         <div className="flex gap-2">
@@ -909,7 +909,7 @@ function ComposeView({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0">
       <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200 bg-white shrink-0">
         <span className="text-sm text-gray-400">{relativeDate(new Date().toISOString())}</span>
         <span className="hidden sm:block text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
