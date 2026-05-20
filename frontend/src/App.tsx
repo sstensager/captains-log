@@ -20,6 +20,7 @@ export default function App() {
   const [returnLogId, setReturnLogId] = useState<number | null>(null)
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const [mobileView, setMobileView] = useState<MobileView>('list')
+  const [editing, setEditing] = useState(false)
 
   useEffect(() => {
     fetchLogs().then(data => { setLogs(data); setLoading(false) })
@@ -163,6 +164,7 @@ export default function App() {
                 onEntityClick={handleEntityClick}
                 onTagClick={handleTagClick}
                 onBack={() => setMobileView('list')}
+                onEditingChange={setEditing}
               />
             </div>
           </>
@@ -177,8 +179,8 @@ export default function App() {
         )}
       </div>
 
-      {/* Bottom nav — mobile only */}
-      <nav className="md:hidden shrink-0 flex border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)]">
+      {/* Bottom nav — mobile only, hidden while composing or editing */}
+      <nav className={`md:hidden shrink-0 flex border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] ${composing || editing ? 'hidden' : ''}`}>
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}

@@ -342,6 +342,7 @@ interface Props {
   onTagClick: (tag: string) => void
   refreshKey?: number
   onBack?: () => void
+  onEditingChange?: (editing: boolean) => void
 }
 
 // ── Indent/dedent helper (single-line and multi-line block select) ────────────
@@ -429,9 +430,17 @@ function SmartTextarea({
 
   useLayoutEffect(() => {
     if (selAfter.current && ref.current) {
-      ref.current.selectionStart = selAfter.current.start
-      ref.current.selectionEnd = selAfter.current.end
+      const ta = ref.current
+      ta.selectionStart = selAfter.current.start
+      ta.selectionEnd = selAfter.current.end
       selAfter.current = null
+      // Scroll textarea to keep cursor in view (especially important on mobile)
+      const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 24
+      const linesAbove = ta.value.slice(0, ta.selectionEnd).split('\n').length - 1
+      const cursorBottom = (linesAbove + 1) * lineHeight
+      if (cursorBottom > ta.scrollTop + ta.clientHeight) {
+        ta.scrollTop = cursorBottom - ta.clientHeight + lineHeight
+      }
     }
   })
 
@@ -1001,6 +1010,7 @@ export default function CenterPane({
   onTagClick,
   refreshKey,
   onBack,
+  onEditingChange,
 }: Props) {
   const [log, setLog] = useState<LogDetail | null>(null)
   const [loading, setLoading] = useState(false)
@@ -1009,8 +1019,10 @@ export default function CenterPane({
   const [editing, setEditing] = useState(false)
   const [pendingReject, setPendingReject] = useState<{ name: string; ids: number[] } | null>(null)
 
+  const enterEditing = (v: boolean) => { setEditing(v); onEditingChange?.(v) }
+
   useEffect(() => {
-    setEditing(false)
+    enterEditing(false)
     if (!selectedLogId) { setLog(null); setTasks([]); return }
     setLoading(true)
     Promise.all([fetchLog(selectedLogId), fetchTasks(selectedLogId)]).then(([data, t]) => {
@@ -1049,12 +1061,12 @@ export default function CenterPane({
       <EditView
         initialText={log.raw_text}
         annotations={log.annotations}
-        onCancel={() => setEditing(false)}
+        onCancel={() => enterEditing(false)}
         onSave={async (text) => {
           const updated = await updateLog(log.id, text)
           setLog({ ...log, raw_text: updated.raw_text, annotations: [], tags: updated.tags })
           setTasks([])
-          setEditing(false)
+          enterEditing(false)
           onLogUpdated(updated)
           // Re-fetch after a short delay so background parse can run
           setTimeout(() => {
@@ -1125,7 +1137,7 @@ export default function CenterPane({
         <div className="flex items-center gap-2">
           {log && (
             <button
-              onClick={() => setEditing(true)}
+              onClick={() => enterEditing(true)}
               className="text-xs px-2.5 py-1 rounded border bg-white text-gray-600 border-gray-200 hover:border-gray-400 transition-colors"
             >
               Edit
