@@ -417,6 +417,7 @@ function SmartTextarea({
   textareaClassName?: string
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
   const selAfter = useRef<{ start: number; end: number } | null>(null)
   const savedSel = useRef<{ start: number; end: number } | null>(null)
   const [entities, setEntities] = useState<EntitySummary[]>([])
@@ -428,18 +429,25 @@ function SmartTextarea({
   useEffect(() => { ref.current?.focus() }, [])
   useEffect(() => { fetchEntities().then(setEntities) }, [])
 
+  // Auto-grow textarea height and scroll wrapper div to cursor after programmatic moves.
+  // We scroll the wrapper div (not the textarea) because div.scrollTop works reliably on iOS;
+  // textarea.scrollTop does not.
   useLayoutEffect(() => {
-    if (selAfter.current && ref.current) {
-      const ta = ref.current
-      ta.selectionStart = selAfter.current.start
-      ta.selectionEnd = selAfter.current.end
+    const ta = ref.current
+    const wrap = wrapRef.current
+    if (!ta) return
+    ta.style.height = 'auto'
+    ta.style.height = `${ta.scrollHeight}px`
+    if (selAfter.current && wrap) {
+      const { start, end } = selAfter.current
       selAfter.current = null
-      // Scroll textarea to keep cursor in view (especially important on mobile)
+      ta.selectionStart = start
+      ta.selectionEnd = end
       const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 24
-      const linesAbove = ta.value.slice(0, ta.selectionEnd).split('\n').length - 1
+      const linesAbove = ta.value.slice(0, end).split('\n').length - 1
       const cursorBottom = (linesAbove + 1) * lineHeight
-      if (cursorBottom > ta.scrollTop + ta.clientHeight) {
-        ta.scrollTop = cursorBottom - ta.clientHeight + lineHeight
+      if (cursorBottom > wrap.scrollTop + wrap.clientHeight) {
+        wrap.scrollTop = cursorBottom - wrap.clientHeight + lineHeight
       }
     }
   })
@@ -462,7 +470,7 @@ function SmartTextarea({
         const r = ref.current.getBoundingClientRect()
         const linesAbove = val.slice(0, pos).split('\n').length - 1
         const lineHeight = parseFloat(getComputedStyle(ref.current).lineHeight) || 29
-        const cursorTop = r.top + linesAbove * lineHeight + lineHeight + 4 - ref.current.scrollTop
+        const cursorTop = r.top + linesAbove * lineHeight + lineHeight + 4 - (wrapRef.current?.scrollTop ?? 0)
         // Flip above cursor if too close to viewport bottom
         const dropHeight = 280
         const top = cursorTop + dropHeight > window.innerHeight
@@ -622,21 +630,24 @@ function SmartTextarea({
 
   return (
     <div className="relative flex-1 flex flex-col min-h-0">
-      <textarea
-        ref={ref}
-        value={value}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        onSelect={(e) => {
-          const ta = e.currentTarget
-          savedSel.current = { start: ta.selectionStart, end: ta.selectionEnd }
-        }}
-        onBlur={(e) => {
-          savedSel.current = { start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd }
-        }}
-        placeholder={placeholder}
-        className={textareaClassName ?? 'flex-1 w-full resize-none outline-none overflow-y-scroll text-base text-gray-800 leading-[1.8] placeholder-gray-300 bg-transparent'}
-      />
+      {/* Scrollable wrapper — div.scrollTop works reliably on iOS; textarea.scrollTop does not */}
+      <div ref={wrapRef} className="flex-1 overflow-y-auto min-h-0">
+        <textarea
+          ref={ref}
+          value={value}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onSelect={(e) => {
+            const ta = e.currentTarget
+            savedSel.current = { start: ta.selectionStart, end: ta.selectionEnd }
+          }}
+          onBlur={(e) => {
+            savedSel.current = { start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd }
+          }}
+          placeholder={placeholder}
+          className={textareaClassName ?? 'w-full resize-none outline-none overflow-hidden text-base text-gray-800 leading-[1.8] placeholder-gray-300 bg-transparent'}
+        />
+      </div>
       {/* Mobile formatting toolbar — hidden on md+ where keyboard shortcuts work */}
       <div className="flex md:hidden items-center gap-1 border-t border-gray-100 bg-white py-1 px-1 shrink-0">
         {([
