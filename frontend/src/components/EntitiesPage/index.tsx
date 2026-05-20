@@ -8,8 +8,12 @@ const ENTITY_TYPES = ['person', 'place', 'pet', 'organization', 'event', 'thing'
 
 export default function EntitiesPage({
   onSelectLog,
+  initialEntity,
+  onBack,
 }: {
   onSelectLog: (id: number) => void
+  initialEntity?: string
+  onBack?: () => void
 }) {
   const [entities, setEntities] = useState<EntitySummary[]>([])
   const [query, setQuery] = useState('')
@@ -26,6 +30,10 @@ export default function EntitiesPage({
   useEffect(() => {
     fetchEntities().then(setEntities)
   }, [])
+
+  useEffect(() => {
+    if (initialEntity) fetchEntity(initialEntity).then(setSelected)
+  }, [initialEntity])
 
   useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>('[data-selected="true"]')
@@ -50,7 +58,7 @@ export default function EntitiesPage({
     setCreateError(null)
     try {
       const entity = await createEntity(name, newType)
-      setEntities(prev => [...prev, { id: entity.id, name: entity.name, type: entity.type, status: entity.status, ref_count: 0 }])
+      setEntities(prev => [...prev, { id: entity.id, name: entity.name, type: entity.type, status: entity.status, ref_count: 0, confirmed_ref_count: 0 }])
       setSelected(entity)
       setCreating(false)
       setNewName('')
@@ -74,6 +82,17 @@ export default function EntitiesPage({
     <div className="flex flex-1 min-h-0 min-w-0">
       {/* List panel — full screen on mobile when no selection */}
       <div className={`${showDetail ? 'hidden md:flex' : 'flex'} md:flex w-full md:w-72 shrink-0 flex-col border-r border-gray-200 bg-white`}>
+        {onBack && (
+          <div className="px-3 pt-3 pb-2 border-b border-gray-100">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              Back to log
+            </button>
+          </div>
+        )}
         {/* Search + filter */}
         <div className="px-3 pt-3 pb-2 border-b border-gray-100 space-y-2">
           <div className="flex gap-1.5">
@@ -198,13 +217,21 @@ export default function EntitiesPage({
         {selected ? (
           <>
             {/* Mobile back button */}
-            <div className="md:hidden flex items-center px-4 py-3 border-b border-gray-200">
+            <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200">
               <button
                 onClick={() => setSelected(null)}
                 className="text-gray-400 hover:text-gray-600 p-1 -ml-1"
               >
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+                >
+                  Back to log
+                </button>
+              )}
             </div>
             <EntityDetailView
               entity={selected}

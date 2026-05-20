@@ -329,8 +329,6 @@ interface Props {
   onCancelCompose: () => void
   onLogCreated: (log: LogDetail) => void
   onLogUpdated: (log: LogDetail) => void
-  onToggleRightRail: () => void
-  rightRailOpen: boolean
   onEntityClick: (name: string) => void
   onTagClick: (tag: string) => void
   refreshKey?: number
@@ -976,8 +974,6 @@ export default function CenterPane({
   onCancelCompose,
   onLogCreated,
   onLogUpdated,
-  onToggleRightRail,
-  rightRailOpen,
   onEntityClick,
   onTagClick,
   refreshKey,
@@ -1118,16 +1114,6 @@ export default function CenterPane({
               Edit
             </button>
           )}
-          <button
-            onClick={onToggleRightRail}
-            className={`text-xs px-2.5 py-1 rounded border transition-colors ${
-              rightRailOpen
-                ? 'bg-gray-900 text-white border-gray-900'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
-            }`}
-          >
-            Context
-          </button>
         </div>
       </div>
 

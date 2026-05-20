@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import LeftRail from './components/LeftRail'
 import CenterPane from './components/CenterPane'
-import RightRail from './components/RightRail'
 import EntitiesPage from './components/EntitiesPage'
 import TasksPage from './components/TasksPage'
 import type { LogDetail, LogSummary } from './types'
 import { fetchLogs } from './api'
 
 type Page = 'logs' | 'entities' | 'tasks'
-type MobileView = 'list' | 'detail' | 'context'
+type MobileView = 'list' | 'detail'
 
 export default function App() {
   const appRef = useRef<HTMLDivElement>(null)
@@ -16,11 +15,10 @@ export default function App() {
   const [logs, setLogs] = useState<LogSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedLogId, setSelectedLogId] = useState<number | null>(null)
-  const [rightRailOpen, setRightRailOpen] = useState(false)
   const [composing, setComposing] = useState(false)
-  const [entityToShow, setEntityToShow] = useState<string | null>(null)
+  const [entityToNavigate, setEntityToNavigate] = useState<string | null>(null)
+  const [returnLogId, setReturnLogId] = useState<number | null>(null)
   const [activeTag, setActiveTag] = useState<string | null>(null)
-  const [logRefreshKey, setLogRefreshKey] = useState(0)
   const [mobileView, setMobileView] = useState<MobileView>('list')
 
   useEffect(() => {
@@ -50,14 +48,12 @@ export default function App() {
   const handleSelectLog = (id: number) => {
     setSelectedLogId(id)
     setComposing(false)
-    setRightRailOpen(true)
     setMobileView('detail')
   }
 
   const handleNewLog = () => {
     setComposing(true)
     setSelectedLogId(null)
-    setRightRailOpen(false)
     setMobileView('detail')
   }
 
@@ -88,26 +84,29 @@ export default function App() {
   }
 
   const handleEntityClick = (name: string) => {
-    setEntityToShow(name)
-    setRightRailOpen(true)
-    setMobileView('context')
+    setReturnLogId(selectedLogId)
+    setEntityToNavigate(name)
+    setPage('entities')
   }
 
   const handleSelectLogFromEntity = (id: number) => {
     setPage('logs')
     setSelectedLogId(id)
-    setRightRailOpen(false)
+    setEntityToNavigate(null)
+    setReturnLogId(null)
     setMobileView('detail')
+  }
+
+  const handleBackFromEntity = () => {
+    setPage('logs')
+    setMobileView('detail')
+    setEntityToNavigate(null)
+    setReturnLogId(null)
   }
 
   const handleTagClick = (tag: string | null) => {
     setActiveTag(tag)
     if (tag) { setPage('logs'); setMobileView('list') }
-  }
-
-  const handleToggleRightRail = () => {
-    setRightRailOpen(o => !o)
-    setMobileView('context')
   }
 
   const NAV_ITEMS: { key: Page; label: string }[] = [
@@ -124,7 +123,7 @@ export default function App() {
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setPage(key)}
+            onClick={() => { setPage(key); setEntityToNavigate(null); setReturnLogId(null) }}
             className={`text-sm px-3 py-1 rounded transition-colors ${
               page === key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
             }`}
@@ -161,32 +160,18 @@ export default function App() {
                 onCancelCompose={handleCancelCompose}
                 onLogCreated={handleLogCreated}
                 onLogUpdated={handleLogUpdated}
-                onToggleRightRail={handleToggleRightRail}
-                rightRailOpen={rightRailOpen}
                 onEntityClick={handleEntityClick}
                 onTagClick={handleTagClick}
-                refreshKey={logRefreshKey}
                 onBack={() => setMobileView('list')}
-              />
-            </div>
-
-            {/* Right rail — full screen on mobile when mobileView=context */}
-            <div className={`${mobileView === 'context' ? 'flex' : 'hidden'} md:flex flex-col min-h-0 w-full md:w-auto`}>
-              <RightRail
-                open={rightRailOpen || mobileView === 'context'}
-                selectedLogId={selectedLogId}
-                onClose={() => { setRightRailOpen(false); setMobileView('detail') }}
-                entityToShow={entityToShow}
-                onSelectLog={handleSelectLog}
-                refreshKey={logRefreshKey}
-                onEntityMerged={() => setLogRefreshKey(k => k + 1)}
-                onLogChanged={() => setLogRefreshKey(k => k + 1)}
-                onBack={() => setMobileView('detail')}
               />
             </div>
           </>
         ) : page === 'entities' ? (
-          <EntitiesPage onSelectLog={handleSelectLogFromEntity} />
+          <EntitiesPage
+            onSelectLog={handleSelectLogFromEntity}
+            initialEntity={entityToNavigate ?? undefined}
+            onBack={returnLogId !== null ? handleBackFromEntity : undefined}
+          />
         ) : (
           <TasksPage onSelectLog={handleSelectLogFromEntity} />
         )}
@@ -197,7 +182,7 @@ export default function App() {
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => { setPage(key); setMobileView('list') }}
+            onClick={() => { setPage(key); setMobileView('list'); setEntityToNavigate(null); setReturnLogId(null) }}
             className={`flex-1 py-3 text-xs font-medium transition-colors ${
               page === key ? 'text-gray-900' : 'text-gray-400'
             }`}
