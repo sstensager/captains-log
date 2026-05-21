@@ -408,6 +408,7 @@ function SmartTextarea({
   onCancel,
   placeholder,
   textareaClassName,
+  trailingToolbar,
 }: {
   value: string
   onChange: (v: string) => void
@@ -415,6 +416,7 @@ function SmartTextarea({
   onCancel: () => void
   placeholder?: string
   textareaClassName?: string
+  trailingToolbar?: React.ReactNode
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -666,6 +668,7 @@ function SmartTextarea({
             {btn.label}
           </button>
         ))}
+        {trailingToolbar && <div className="ml-auto flex items-center gap-2 pl-1">{trailingToolbar}</div>}
       </div>
       {linkQuery !== null && dropdownPos && (
         <div
@@ -921,27 +924,35 @@ function ComposeView({
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0">
-      <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200 bg-white shrink-0">
+      {/* Header — desktop only; on mobile the toolbar row carries the action buttons */}
+      <div className="hidden md:flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white shrink-0">
         <span className="text-sm text-gray-400">{relativeDate(new Date().toISOString())}</span>
-        <span className="hidden sm:block text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
+        <span className="text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
       </div>
-      <div className="flex-1 flex flex-col p-4 md:p-8 pb-0 md:pb-0 min-h-0">
+      <div className="flex-1 flex flex-col p-4 md:p-8 min-h-0">
         <SmartTextarea
           value={text}
           onChange={setText}
           onSave={submit}
           onCancel={onCancel}
           placeholder="What's on your mind?"
+          trailingToolbar={
+            <>
+              <button onClick={onCancel} className="text-sm text-gray-400 hover:text-gray-700 transition-colors">Cancel</button>
+              <button
+                onClick={submit}
+                disabled={!text.trim() || submitting}
+                className="px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg disabled:opacity-40 hover:bg-gray-700 transition-colors"
+              >
+                {submitting ? 'Saving…' : 'Log it'}
+              </button>
+            </>
+          }
         />
       </div>
-      {/* Action bar — outside the scroll area so it's always visible on mobile */}
-      <div className="shrink-0 flex items-center justify-between px-4 md:px-8 py-3 border-t border-gray-100 bg-white">
-        <button
-          onClick={onCancel}
-          className="text-sm text-gray-400 hover:text-gray-700 transition-colors"
-        >
-          Cancel
-        </button>
+      {/* Desktop action bar */}
+      <div className="hidden md:flex shrink-0 items-center justify-between px-8 py-3 border-t border-gray-100 bg-white">
+        <button onClick={onCancel} className="text-sm text-gray-400 hover:text-gray-700 transition-colors">Cancel</button>
         <button
           onClick={submit}
           disabled={!text.trim() || submitting}
