@@ -60,6 +60,7 @@ def annotate_log(
     source_type: str = "text",
     rejected_names: list[str] | None = None,
     confirmed_names: list[str] | None = None,
+    known_entities: list[tuple[str, str]] | None = None,
 ) -> ParseResult:
     """
     Run the parser against an already-inserted log row.
@@ -68,25 +69,53 @@ def annotate_log(
 
     rejected_names  — entity names the user has dismissed; LLM should skip them.
     confirmed_names — names already handled via [[]] links; LLM should skip them.
+    known_entities  — (name, type) tuples from the entity library; LLM should bias toward tagging these.
     """
     current_date = datetime.date.today().isoformat()
 
     messages = [
         {"role": "system", "content": _build_system_prompt(current_date)},
     ]
-    if rejected_names or confirmed_names:
-        context_lines = []
-        if confirmed_names:
-            context_lines.append(
-                "Already linked (skip these, do not re-tag): "
-                + ", ".join(f'"{n}"' for n in confirmed_names)
-            )
-        if rejected_names:
-            context_lines.append(
-                "Previously rejected by user (do not tag): "
-                + ", ".join(f'"{n}"' for n in rejected_names)
-            )
-        messages.append({"role": "system", "content": "\n".join(context_lines)})
+
+    context_lines = []
+
+    if known_entities:
+        by_type: dict[str, list[str]] = {}
+        for name, etype in known_entities:
+            by_type.setdefault(etype, []).append(name)
+        type_labels = {
+            "person": "People",
+            "place": "Places",
+            "organization": "Organizations",
+            "pet": "Pets",
+            "event": "Events",
+            "thing": "Things",
+            "idea": "Ideas",
+        }
+        grouped = "\n".join(
+            f"  {type_labels.get(t, t.title())}: {', '.join(names)}"
+            for t, names in sorted(by_type.items())
+        )
+        context_lines.append(
+            "Known entities — if ANY of these appear in the note (even abbreviated, "
+            "nicknamed, or referred to informally), you MUST include them as a mention. "
+            "Do not skip a known entity just because you wouldn't spontaneously tag it:\n"
+            + grouped
+        )
+
+    if confirmed_names:
+        context_lines.append(
+            "Already linked (skip these, do not re-tag): "
+            + ", ".join(f'"{n}"' for n in confirmed_names)
+        )
+    if rejected_names:
+        context_lines.append(
+            "Previously rejected by user (do not tag): "
+            + ", ".join(f'"{n}"' for n in rejected_names)
+        )
+
+    if context_lines:
+        messages.append({"role": "system", "content": "\n\n".join(context_lines)})
 
     messages.append({"role": "user", "content": raw_text})
 

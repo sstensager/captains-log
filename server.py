@@ -359,14 +359,30 @@ def create_log(body: LogCreate, background_tasks: BackgroundTasks):
     )
 
 
+def _fetch_known_entities(con) -> list[tuple[str, str]]:
+    """Return (canonical_name, entity_type) for all active entities, most-referenced first."""
+    rows = con.execute("""
+        SELECT e.canonical_name, e.entity_type, COUNT(er.id) AS ref_count
+        FROM Entity e
+        LEFT JOIN EntityReference er ON er.entity_id = e.id
+        WHERE e.merged_into_id IS NULL
+          AND e.status NOT IN ('orphaned', 'archived')
+        GROUP BY e.id
+        ORDER BY ref_count DESC, e.canonical_name
+        LIMIT 100
+    """).fetchall()
+    return [(r[0], r[1]) for r in rows]
+
+
 def _bg_parse_and_promote(log_id: int, raw_text: str) -> None:
     """Annotate a log and promote entity mentions. Runs in a background thread."""
     from parser import annotate_log
     con = init_db()
     try:
+        known = _fetch_known_entities(con)
         extract_todos(log_id, raw_text, con)
         extract_links(log_id, raw_text, con)
-        annotate_log(log_id, raw_text, con)
+        annotate_log(log_id, raw_text, con, known_entities=known or None)
         # Write {Name} markers for LLM detections, then re-derive annotations from text
         new_text = write_suggested_markers(log_id, raw_text, con)
         if new_text != raw_text:
@@ -386,6 +402,8 @@ def _bg_reparse(log_id: int, raw_text: str) -> None:
     from parser import annotate_log
     con = init_db()
     try:
+        known = _fetch_known_entities(con)
+
         # Collect rejected names from prior non-text, non-user annotations
         prior = con.execute(
             "SELECT status, COALESCE(corrected_value, value) FROM Annotation "
@@ -416,7 +434,8 @@ def _bg_reparse(log_id: int, raw_text: str) -> None:
         extract_links(log_id, raw_text, con)   # recreates {Name} and [[Name]] annotations
         annotate_log(log_id, raw_text, con,
                      rejected_names=rejected_names or None,
-                     confirmed_names=confirmed_names or None)
+                     confirmed_names=confirmed_names or None,
+                     known_entities=known or None)
 
         # Write {Name} for any newly detected entities not already in text
         new_text = write_suggested_markers(log_id, raw_text, con)
