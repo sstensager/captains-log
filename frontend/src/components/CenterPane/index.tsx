@@ -455,10 +455,11 @@ function SmartTextarea({
   })
 
   const filtered = useMemo(() => {
-    if (linkQuery === null || !linkQuery.trim()) return []
-    return entities
-      .filter(e => e.name.toLowerCase().includes(linkQuery.toLowerCase()))
-      .slice(0, 20)
+    if (linkQuery === null) return []
+    const q = linkQuery.trim().toLowerCase()
+    const sorted = [...entities].sort((a, b) => b.ref_count - a.ref_count)
+    if (!q) return sorted.slice(0, 20)
+    return sorted.filter(e => e.name.toLowerCase().includes(q)).slice(0, 20)
   }, [linkQuery, entities])
 
   const detectLink = (val: string, pos: number) => {

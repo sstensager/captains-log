@@ -440,17 +440,17 @@ export default function TasksPage({ onSelectLog }: Props) {
                     return (
                       <div
                         key={id}
-                        className={`flex items-center gap-3 py-2.5 pr-4 border-t border-gray-50 transition-opacity ${done ? 'opacity-50' : ''}`}
+                        onClick={() => toggle(task)}
+                        className={`flex items-center gap-3 py-2.5 pr-4 border-t border-gray-50 transition-opacity cursor-pointer active:bg-gray-50 ${done ? 'opacity-50' : ''}`}
                         style={{ paddingLeft: `${Math.min(1 + (task.indent ?? 0) * 1.25, 4)}rem` }}
                       >
-                        <button
-                          onClick={() => toggle(task)}
+                        <div
                           className={`w-4 h-4 shrink-0 rounded border text-xs flex items-center justify-center transition-colors ${
-                            done ? 'bg-gray-900 border-gray-900 text-white' : 'border-gray-400 hover:border-gray-600'
+                            done ? 'bg-gray-900 border-gray-900 text-white' : 'border-gray-400'
                           }`}
                         >
                           {done && '✓'}
-                        </button>
+                        </div>
                         <span className={`text-sm min-w-0 break-words ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                           {task.title}
                         </span>
@@ -537,17 +537,17 @@ export default function TasksPage({ onSelectLog }: Props) {
                           return (
                             <div
                               key={id}
-                              className={`flex items-center gap-3 py-2.5 pr-4 transition-opacity ${done ? 'opacity-50' : ''}`}
+                              onClick={() => toggle(task)}
+                              className={`flex items-center gap-3 py-2.5 pr-4 transition-opacity cursor-pointer active:bg-gray-50 ${done ? 'opacity-50' : ''}`}
                               style={{ paddingLeft: `${Math.min(1 + (task.indent ?? 0) * 1.25, 4)}rem` }}
                             >
-                              <button
-                                onClick={() => toggle(task)}
+                              <div
                                 className={`w-4 h-4 shrink-0 rounded border text-xs flex items-center justify-center transition-colors ${
-                                  done ? 'bg-gray-900 border-gray-900 text-white' : 'border-gray-400 hover:border-gray-600'
+                                  done ? 'bg-gray-900 border-gray-900 text-white' : 'border-gray-400'
                                 }`}
                               >
                                 {done && '✓'}
-                              </button>
+                              </div>
                               <span className={`text-sm min-w-0 break-words ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                                 {task.title}
                               </span>
