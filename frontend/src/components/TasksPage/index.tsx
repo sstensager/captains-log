@@ -155,11 +155,15 @@ export default function TasksPage({ onSelectLog }: Props) {
     statusFilter === 'open' ? t.status !== 'done' : t.status === 'done'
   )
   const allTags = [...new Set(statusMatchingTasks.flatMap(t => t.tags))].sort()
+  const entityTaskCounts = statusMatchingTasks.reduce<Record<string, number>>((acc, task) => {
+    task.entities.forEach(e => { acc[e.name] = (acc[e.name] ?? 0) + 1 })
+    return acc
+  }, {})
   const allEntities = Object.values(
     statusMatchingTasks.flatMap(t => t.entities).reduce<Record<string, TaskEntityRef>>((acc, e) => {
       acc[e.name] = e; return acc
     }, {})
-  ).sort((a, b) => a.name.localeCompare(b.name))
+  ).sort((a, b) => (entityTaskCounts[b.name] ?? 0) - (entityTaskCounts[a.name] ?? 0))
 
   const handleSearch = (q: string) => {
     setSearchInput(q)
@@ -244,6 +248,33 @@ export default function TasksPage({ onSelectLog }: Props) {
                 <button onClick={() => setMobileFilterOpen(false)} className="text-gray-400 text-lg px-1">✕</button>
               </div>
               <div className="overflow-y-auto px-4 py-3 space-y-4">
+                {allEntities.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nodes</div>
+                    <div className="flex flex-col gap-1.5">
+                      {allEntities.map(entity => {
+                        const c = colorFor(entity.type)
+                        const isActive = activeEntity === entity.name
+                        const count = entityTaskCounts[entity.name] ?? 0
+                        return (
+                          <button
+                            key={entity.name}
+                            onClick={() => { setPill('entity', entity.name); setMobileFilterOpen(false) }}
+                            className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-full border transition-opacity w-full"
+                            style={isActive
+                              ? { backgroundColor: '#111827', borderColor: '#111827', color: '#fff' }
+                              : { backgroundColor: c.bg, borderColor: c.border, color: c.text }
+                            }
+                          >
+                            {!isActive && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />}
+                            <span className="flex-1 text-left truncate">{entity.name}</span>
+                            <span className={`shrink-0 text-xs font-medium tabular-nums ${isActive ? 'text-white/60' : 'text-gray-400'}`}>{count}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
                 {allTags.length > 0 && (
                   <div>
                     <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tags</div>
@@ -259,31 +290,6 @@ export default function TasksPage({ onSelectLog }: Props) {
                           {tag}
                         </button>
                       ))}
-                    </div>
-                  </div>
-                )}
-                {allEntities.length > 0 && (
-                  <div>
-                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nodes</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {allEntities.map(entity => {
-                        const c = colorFor(entity.type)
-                        const isActive = activeEntity === entity.name
-                        return (
-                          <button
-                            key={entity.name}
-                            onClick={() => { setPill('entity', entity.name); setMobileFilterOpen(false) }}
-                            className="inline-flex items-center gap-1 text-sm px-3 py-1 rounded-full border transition-opacity"
-                            style={isActive
-                              ? { backgroundColor: '#111827', borderColor: '#111827', color: '#fff' }
-                              : { backgroundColor: c.bg, borderColor: c.border, color: c.text }
-                            }
-                          >
-                            {!isActive && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />}
-                            {entity.name}
-                          </button>
-                        )
-                      })}
                     </div>
                   </div>
                 )}
@@ -327,6 +333,34 @@ export default function TasksPage({ onSelectLog }: Props) {
             )}
           </div>
 
+          {allEntities.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nodes</div>
+              <div className="flex flex-col gap-1">
+                {allEntities.map(entity => {
+                  const c = colorFor(entity.type)
+                  const isActive = activeEntity === entity.name
+                  const count = entityTaskCounts[entity.name] ?? 0
+                  return (
+                    <button
+                      key={entity.name}
+                      onClick={() => setPill('entity', entity.name)}
+                      className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border transition-opacity hover:opacity-75 w-full"
+                      style={isActive
+                        ? { backgroundColor: '#111827', borderColor: '#111827', color: '#fff' }
+                        : { backgroundColor: c.bg, borderColor: c.border, color: c.text }
+                      }
+                    >
+                      {!isActive && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />}
+                      <span className="truncate flex-1 text-left">{entity.name}</span>
+                      <span className={`shrink-0 text-[10px] font-medium tabular-nums ${isActive ? 'text-white/60' : 'text-gray-400'}`}>{count}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {allTags.length > 0 && (
             <div>
               <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tags</div>
@@ -342,32 +376,6 @@ export default function TasksPage({ onSelectLog }: Props) {
                     {tag}
                   </button>
                 ))}
-              </div>
-            </div>
-          )}
-
-          {allEntities.length > 0 && (
-            <div>
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nodes</div>
-              <div className="flex flex-wrap gap-1">
-                {allEntities.map(entity => {
-                  const c = colorFor(entity.type)
-                  const isActive = activeEntity === entity.name
-                  return (
-                    <button
-                      key={entity.name}
-                      onClick={() => setPill('entity', entity.name)}
-                      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-opacity hover:opacity-75"
-                      style={isActive
-                        ? { backgroundColor: '#111827', borderColor: '#111827', color: '#fff' }
-                        : { backgroundColor: c.bg, borderColor: c.border, color: c.text }
-                      }
-                    >
-                      {!isActive && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.dot }} />}
-                      {entity.name}
-                    </button>
-                  )
-                })}
               </div>
             </div>
           )}
