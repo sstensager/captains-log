@@ -13,6 +13,20 @@
 
 ---
 
+## Recently Shipped (session 2026-05-21)
+
+- **Todo row tap target** — entire row now toggles done/open, not just the checkbox
+- **Entity picker shows all on open** — empty `[[` now shows all entities sorted by ref_count instead of blank list
+- **Todos sidebar: Nodes above Tags** — sorted by todo count with count badge per node
+- **Edit note from Todos** — tapping the section header in grouped view opens the source note directly in edit mode
+- **Section header chevron** — clear tap affordance in both flat and grouped views
+- **Global cursor: pointer** — all buttons now show hand cursor on desktop hover
+- **#6 confirmed closed** — textarea scroll while typing resolved by prior refactor
+- **#8 confirmed closed** — context pane → entity node page done in prior session
+- **#12 confirmed closed** — known entity injection into parser done in prior session
+
+---
+
 ## Recently Shipped (session 2026-05-20)
 
 - **Todo insertion cursor jump fixed** — inserting a todo on a blank line below existing text no longer jumps to the next text line
@@ -44,36 +58,20 @@
 
 ## ⬅ START HERE NEXT SESSION
 
-### P2 — Mobile polish
+### P2 — Navigation
 
-#### 6. General textarea scroll while typing
-**What:** Beyond the new-line case, the textarea doesn't always keep the cursor in view while typing normally on mobile. The auto-grow + wrapper-div refactor likely fixed this — confirm on device and close out.
-
-#### 9. Todo row tap target — entire row should check/uncheck
-**What:** In the Todos page, you have to tap the small checkbox to toggle a todo. The whole row should be tappable. Small checkbox is too fiddly on mobile.
-**Where:** `TasksPage/index.tsx` — the row rendering.
-
-#### 10. Edit note from Todos page
-**What:** No way to jump into editing the source note from the Todos page. Should be easy to navigate from a todo item to the note it lives in and enter edit mode.
-
-#### 11. Entity picker shows all entities on open (scrollable, no typing required)
-**What:** Tapping `[[]]` or typing `[[` shows "Type to search…" with an empty list. On mobile especially, you want to scroll existing entities without having to type. Fix: when query is empty, show all entities sorted by usage (same 20-item cap, scrollable).
-**Where:** `filtered` memo in `SmartTextarea` — currently returns `[]` when `linkQuery.trim()` is empty.
+#### 13. Back button always returns you to where you came from
+**What:** Back navigation is inconsistent. Examples that should work:
+- Todos → tap note header → note opens in edit mode → Back → Todos
+- Nodes → tap a log mention → note opens → Back → Node page
+**Where:** `App.tsx` — needs a navigation stack or origin-tracking so Back always pops to the previous page/context, not just a hardcoded destination.
 
 ---
 
 ### P3 — Features
 
-#### 12. Parser should check existing confirmed entities before annotating
-**What:** If "app" is already a confirmed entity node, the LLM annotation pass often misses it in new notes. The parser should be given the list of confirmed entity names as context so it can find them even when it wouldn't spontaneously tag them.
-**Where:** `parser_v2.py` — pass confirmed entity list into the LLM prompt.
-
 #### 7. Smart paste for bullets / lists
 **What:** Pasting multi-line text from another app (e.g. a shopping list) doesn't preserve bullet or indentation formatting.
-
-#### 8. Navigate from context pane → entity node page
-**What:** No direct link from an entity in the context pane to its full node page. Currently requires closing context, opening Nodes, searching.
-**Open design question:** Consider killing the context pane entirely and having entity taps navigate directly to the node page (log breadcrumb provides the back path).
 
 ---
 
