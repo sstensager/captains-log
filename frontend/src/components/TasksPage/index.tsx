@@ -496,12 +496,9 @@ export default function TasksPage({ onSelectLog, onEditLog }: Props) {
                   <div className="px-4 py-3 border-b border-gray-100 flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       {group.log_preview && (
-                        <button
-                          onClick={() => group.source_log_id && (onEditLog ?? onSelectLog)(group.source_log_id)}
-                          className="text-sm font-medium text-gray-700 hover:text-gray-900 text-left truncate block w-full"
-                        >
+                        <div className="text-sm font-medium text-gray-700 truncate">
                           <AnnotatedText text={group.log_preview} />
-                        </button>
+                        </div>
                       )}
                       {group.log_created_at && (
                         <div className="text-xs text-gray-400 mt-0.5">
@@ -534,9 +531,12 @@ export default function TasksPage({ onSelectLog, onEditLog }: Props) {
                   {group.sections.map((section, si) => (
                     <div key={si}>
                       {section.header && (
-                        <div className="px-4 py-1.5 text-xs text-gray-400 italic bg-gray-50 border-b border-gray-100">
+                        <button
+                          onClick={() => group.source_log_id && (onEditLog ?? onSelectLog)(group.source_log_id)}
+                          className="w-full px-4 py-1.5 text-xs text-gray-400 italic bg-gray-50 border-b border-gray-100 text-left hover:bg-gray-100 transition-colors"
+                        >
                           <AnnotatedText text={section.header} />
-                        </div>
+                        </button>
                       )}
                       <div className="divide-y divide-gray-50">
                         {section.taskIds.map(id => {
