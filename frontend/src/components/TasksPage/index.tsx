@@ -493,15 +493,15 @@ export default function TasksPage({ onSelectLog, onEditLog }: Props) {
               return (
                 <div key={group.key} className="rounded-xl border bg-white shadow-sm overflow-hidden">
                   {/* Group header */}
-                  <div
-                    className="px-4 py-3 border-b border-gray-100 flex items-start justify-between gap-3 cursor-pointer active:bg-gray-50"
-                    onClick={() => group.source_log_id && (onEditLog ?? onSelectLog)(group.source_log_id)}
-                  >
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       {group.log_preview && (
-                        <div className="text-sm font-medium text-gray-700 text-left truncate block w-full">
+                        <button
+                          onClick={() => group.source_log_id && (onEditLog ?? onSelectLog)(group.source_log_id)}
+                          className="text-sm font-medium text-gray-700 hover:text-gray-900 text-left truncate block w-full"
+                        >
                           <AnnotatedText text={group.log_preview} />
-                        </div>
+                        </button>
                       )}
                       {group.log_created_at && (
                         <div className="text-xs text-gray-400 mt-0.5">
@@ -509,7 +509,7 @@ export default function TasksPage({ onSelectLog, onEditLog }: Props) {
                         </div>
                       )}
                       {(group.entities.length > 0 || group.tags.length > 0) && (
-                        <div className="flex flex-wrap gap-1 mt-1.5" onClick={e => e.stopPropagation()}>
+                        <div className="flex flex-wrap gap-1 mt-1.5">
                           {group.entities.map(entity => (
                             <EntityChip key={entity.name} entity={entity} onClick={() => setPill('entity', entity.name)} />
                           ))}
