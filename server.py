@@ -900,6 +900,11 @@ def patch_entity(entity_id: int, body: EntityPatch):
                     )
                     con.execute("DELETE FROM Log_fts WHERE rowid = ?", (log_id,))
                     con.execute("INSERT INTO Log_fts(rowid, raw_text) VALUES (?, ?)", (log_id, new_raw))
+                    # Null out stored char spans — positions are stale after raw text shifts
+                    con.execute(
+                        "UPDATE Annotation SET start_char = NULL, end_char = NULL, text_span = NULL WHERE log_id = ?",
+                        (log_id,),
+                    )
 
             # Update annotation values
             con.execute(
