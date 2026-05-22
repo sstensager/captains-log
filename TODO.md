@@ -64,7 +64,16 @@
 **What:** Back navigation is inconsistent. Examples that should work:
 - Todos → tap note header → note opens in edit mode → Back → Todos
 - Nodes → tap a log mention → note opens → Back → Node page
-**Where:** `App.tsx` — needs a navigation stack or origin-tracking so Back always pops to the previous page/context, not just a hardcoded destination.
+
+**Current state (`App.tsx`):**
+- `page` is `'logs' | 'entities' | 'tasks'`
+- `handleEditLogFromTasks(id)` navigates to `page='logs'` but clears `returnLogId`, so Back goes to the log list, not back to Todos
+- `handleSelectLogFromEntity(id)` similarly resets to `page='logs'` with no memory of coming from Nodes
+- There's already a partial pattern: `returnLogId` + `handleBackFromEntity` — used when a log opens an entity page, so Back returns to that log. Extend this pattern.
+
+**Approach:** Add a `returnPage: Page | null` state (alongside the existing `returnLogId`). Set it when navigating to `page='logs'` from Todos or Nodes. CenterPane's Back button (or the top-level back handler) checks `returnPage` and navigates there instead of defaulting to the log list. Clear `returnPage` on explicit nav-tab clicks.
+
+**Files:** `App.tsx` — add `returnPage` state, set it in `handleEditLogFromTasks` and `handleSelectLogFromEntity`, pass a `returnPage`-aware back handler into CenterPane.
 
 ---
 
