@@ -1,6 +1,6 @@
 # Captain's Log — TODO
 
-*Last updated: 2026-05-20 (session 2)*
+*Last updated: 2026-05-22 (session 4)*
 
 ---
 
@@ -13,7 +13,21 @@
 
 ---
 
-## Recently Shipped (session 2026-05-21)
+## Recently Shipped (session 2026-05-22, session 4)
+
+- **Entity rename rewrites raw text** — renaming an entity updates all affected log raw text (`\bOldName\b` → `NewName`, word-boundary regex), annotation values, and FTS index in one transaction. Conflict check returns 409 if new name already exists. Frontend shows a confirmation banner ("Rename X → Y? This will rewrite N notes. Cannot be undone.") before firing for entities with any mentions; zero-mention entities rename silently.
+
+---
+
+## Recently Shipped (session 2026-05-21, session 3)
+
+- **#13 Back navigation** — Back arrow always returns to the originating page with state restored: Nodes preserves the selected entity, Todos preserves the active filter (entity/tag/status)
+- **#7 Smart paste** — pasting from other apps normalizes bullets (`•`, `1.`, `2)` → `- `) and tab indentation (→ 2-space); plain text falls through unchanged
+- **Back arrow in edit mode** — when a note opens in edit mode from Todos, the back arrow is now visible and returns to Todos
+
+---
+
+## Recently Shipped (session 2026-05-21, session 2)
 
 - **Todo row tap target** — entire row now toggles done/open, not just the checkbox
 - **Entity picker shows all on open** — empty `[[` now shows all entities sorted by ref_count instead of blank list
@@ -58,29 +72,7 @@
 
 ## ⬅ START HERE NEXT SESSION
 
-### P2 — Navigation
-
-#### 13. Back button always returns you to where you came from
-**What:** Back navigation is inconsistent. Examples that should work:
-- Todos → tap note header → note opens in edit mode → Back → Todos
-- Nodes → tap a log mention → note opens → Back → Node page
-
-**Current state (`App.tsx`):**
-- `page` is `'logs' | 'entities' | 'tasks'`
-- `handleEditLogFromTasks(id)` navigates to `page='logs'` but clears `returnLogId`, so Back goes to the log list, not back to Todos
-- `handleSelectLogFromEntity(id)` similarly resets to `page='logs'` with no memory of coming from Nodes
-- There's already a partial pattern: `returnLogId` + `handleBackFromEntity` — used when a log opens an entity page, so Back returns to that log. Extend this pattern.
-
-**Approach:** Add a `returnPage: Page | null` state (alongside the existing `returnLogId`). Set it when navigating to `page='logs'` from Todos or Nodes. CenterPane's Back button (or the top-level back handler) checks `returnPage` and navigates there instead of defaulting to the log list. Clear `returnPage` on explicit nav-tab clicks.
-
-**Files:** `App.tsx` — add `returnPage` state, set it in `handleEditLogFromTasks` and `handleSelectLogFromEntity`, pass a `returnPage`-aware back handler into CenterPane.
-
----
-
-### P3 — Features
-
-#### 7. Smart paste for bullets / lists
-**What:** Pasting multi-line text from another app (e.g. a shopping list) doesn't preserve bullet or indentation formatting.
+No active items — see backlog below.
 
 ---
 

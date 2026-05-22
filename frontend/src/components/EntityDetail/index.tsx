@@ -31,17 +31,33 @@ export default function EntityDetailView({
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState(entity.name)
   const [savingName, setSavingName] = useState(false)
+  const [pendingRename, setPendingRename] = useState<string | null>(null)
   const nameRef = useRef<HTMLInputElement>(null)
 
   const commitName = async () => {
     const trimmed = nameValue.trim()
     if (!trimmed || trimmed === entity.name) { setEditingName(false); setNameValue(entity.name); return }
+    if (entity.mentions.length > 0) {
+      setPendingRename(trimmed)
+      setEditingName(false)
+      return
+    }
+    await doRename(trimmed)
+  }
+
+  const doRename = async (name: string) => {
     setSavingName(true)
     try {
-      const updated = await updateEntity(entity.id, { canonical_name: trimmed })
+      const updated = await updateEntity(entity.id, { canonical_name: name })
       onUpdated?.(updated)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Rename failed'
+      if (msg.includes('409')) alert(`An entity named "${name}" already exists.`)
+      else alert(msg)
+      setNameValue(entity.name)
     } finally {
       setSavingName(false)
+      setPendingRename(null)
       setEditingName(false)
     }
   }
@@ -119,6 +135,32 @@ export default function EntityDetailView({
           </button>
         </div>
       )}
+      {/* Rename confirmation */}
+      {pendingRename && (
+        <div className="px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+          <p className="text-xs text-amber-800 leading-snug">
+            <span className="font-semibold">Rename "{entity.name}" → "{pendingRename}"?</span>
+            {' '}This will rewrite the text of {entity.mentions.length} note{entity.mentions.length !== 1 ? 's' : ''}. This cannot be undone.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => doRename(pendingRename)}
+              disabled={savingName}
+              className="text-xs px-2.5 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-40 transition-colors"
+            >
+              {savingName ? 'Renaming…' : 'Yes, rename'}
+            </button>
+            <button
+              onClick={() => { setPendingRename(null); setNameValue(entity.name) }}
+              disabled={savingName}
+              className="text-xs px-2.5 py-1 border border-amber-300 text-amber-700 rounded hover:border-amber-400 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Type dropdown + inline name */}
       <div className="flex items-center gap-2 flex-wrap">
         <select

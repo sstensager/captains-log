@@ -875,6 +875,39 @@ def patch_entity(entity_id: int, body: EntityPatch):
         name = body.canonical_name.strip()
         if not name:
             raise HTTPException(status_code=400, detail="Name cannot be empty")
+        old_name = row[0]
+        if name.lower() != old_name.lower():
+            conflict = con.execute(
+                "SELECT id FROM Entity WHERE LOWER(canonical_name) = LOWER(?) AND id != ? AND merged_into_id IS NULL",
+                (name, entity_id),
+            ).fetchone()
+            if conflict:
+                raise HTTPException(status_code=409, detail=f"An entity named '{name}' already exists.")
+
+            # Update raw text in all logs that reference this entity
+            affected = con.execute(
+                "SELECT DISTINCT er.log_id, l.raw_text FROM EntityReference er "
+                "JOIN Log l ON l.id = er.log_id WHERE er.entity_id = ?",
+                (entity_id,),
+            ).fetchall()
+            pattern = re.compile(r'\b' + re.escape(old_name) + r'\b', re.IGNORECASE)
+            for log_id, raw_text in affected:
+                new_raw = pattern.sub(name, raw_text)
+                if new_raw != raw_text:
+                    con.execute(
+                        "UPDATE Log SET raw_text = ?, updated_at = datetime('now') WHERE id = ?",
+                        (new_raw, log_id),
+                    )
+                    con.execute("DELETE FROM Log_fts WHERE rowid = ?", (log_id,))
+                    con.execute("INSERT INTO Log_fts(rowid, raw_text) VALUES (?, ?)", (log_id, new_raw))
+
+            # Update annotation values
+            con.execute(
+                "UPDATE Annotation SET value = ? WHERE LOWER(value) = LOWER(?) "
+                "AND log_id IN (SELECT log_id FROM EntityReference WHERE entity_id = ?)",
+                (name, old_name, entity_id),
+            )
+
         con.execute("UPDATE Entity SET canonical_name = ? WHERE id = ?", (name, entity_id))
 
     if body.user_notes is not None:
