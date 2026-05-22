@@ -21,6 +21,7 @@ export default function App() {
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const [mobileView, setMobileView] = useState<MobileView>('list')
   const [editing, setEditing] = useState(false)
+  const [pendingEdit, setPendingEdit] = useState(false)
 
   useEffect(() => {
     fetchLogs().then(data => { setLogs(data); setLoading(false) })
@@ -98,6 +99,15 @@ export default function App() {
     setMobileView('detail')
   }
 
+  const handleEditLogFromTasks = (id: number) => {
+    setPage('logs')
+    setSelectedLogId(id)
+    setEntityToNavigate(null)
+    setReturnLogId(null)
+    setMobileView('detail')
+    setPendingEdit(true)
+  }
+
   const handleBackFromEntity = () => {
     setPage('logs')
     setMobileView('detail')
@@ -165,6 +175,8 @@ export default function App() {
                 onTagClick={handleTagClick}
                 onBack={() => setMobileView('list')}
                 onEditingChange={setEditing}
+                autoEdit={pendingEdit}
+                onAutoEditConsumed={() => setPendingEdit(false)}
               />
             </div>
           </>
@@ -175,7 +187,7 @@ export default function App() {
             onBack={returnLogId !== null ? handleBackFromEntity : undefined}
           />
         ) : (
-          <TasksPage onSelectLog={handleSelectLogFromEntity} />
+          <TasksPage onSelectLog={handleSelectLogFromEntity} onEditLog={handleEditLogFromTasks} />
         )}
       </div>
 

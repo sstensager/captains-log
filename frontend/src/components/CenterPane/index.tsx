@@ -343,6 +343,8 @@ interface Props {
   refreshKey?: number
   onBack?: () => void
   onEditingChange?: (editing: boolean) => void
+  autoEdit?: boolean
+  onAutoEditConsumed?: () => void
 }
 
 // ── Indent/dedent helper (single-line and multi-line block select) ────────────
@@ -1047,6 +1049,8 @@ export default function CenterPane({
   refreshKey,
   onBack,
   onEditingChange,
+  autoEdit,
+  onAutoEditConsumed,
 }: Props) {
   const [log, setLog] = useState<LogDetail | null>(null)
   const [loading, setLoading] = useState(false)
@@ -1063,6 +1067,7 @@ export default function CenterPane({
     setLoading(true)
     Promise.all([fetchLog(selectedLogId), fetchTasks(selectedLogId)]).then(([data, t]) => {
       setLog(data); setLoading(false); setTasks(t)
+      if (autoEdit) { enterEditing(true); onAutoEditConsumed?.() }
     })
   }, [selectedLogId, refreshKey])
 
