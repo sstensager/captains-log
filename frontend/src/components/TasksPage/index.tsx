@@ -474,7 +474,7 @@ export default function TasksPage({ onSelectLog, onEditLog }: Props) {
                           className="w-full px-4 py-1.5 text-xs text-gray-400 italic bg-gray-50 border-t border-gray-100 text-left hover:bg-gray-100 active:bg-gray-200 transition-colors flex items-center gap-2"
                         >
                           <span className="flex-1 min-w-0"><AnnotatedText text={section.header} /></span>
-                          <svg className="w-3 h-3 shrink-0 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                          <svg className="w-3 h-3 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                         </button>,
                         ...rows,
                       ]
@@ -537,7 +537,7 @@ export default function TasksPage({ onSelectLog, onEditLog }: Props) {
                           className="w-full px-4 py-1.5 text-xs text-gray-400 italic bg-gray-50 border-b border-gray-100 text-left hover:bg-gray-100 active:bg-gray-200 transition-colors flex items-center gap-2"
                         >
                           <span className="flex-1 min-w-0"><AnnotatedText text={section.header} /></span>
-                          <svg className="w-3 h-3 shrink-0 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                          <svg className="w-3 h-3 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                         </button>
                       )}
                       <div className="divide-y divide-gray-50">
