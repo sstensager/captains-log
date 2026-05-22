@@ -891,6 +891,7 @@ def patch_entity(entity_id: int, body: EntityPatch):
                 (entity_id,),
             ).fetchall()
             pattern = re.compile(r'\b' + re.escape(old_name) + r'\b', re.IGNORECASE)
+            delta = len(name) - len(old_name)
             for log_id, raw_text in affected:
                 new_raw = pattern.sub(name, raw_text)
                 if new_raw != raw_text:
@@ -900,11 +901,27 @@ def patch_entity(entity_id: int, body: EntityPatch):
                     )
                     con.execute("DELETE FROM Log_fts WHERE rowid = ?", (log_id,))
                     con.execute("INSERT INTO Log_fts(rowid, raw_text) VALUES (?, ?)", (log_id, new_raw))
-                    # Null out stored char spans — positions are stale after raw text shifts
-                    con.execute(
-                        "UPDATE Annotation SET start_char = NULL, end_char = NULL, text_span = NULL WHERE log_id = ?",
-                        (log_id,),
-                    )
+                    if delta != 0:
+                        # Update annotation char spans. Process matches right-to-left so
+                        # earlier shifts don't corrupt later match positions.
+                        for m in reversed(list(pattern.finditer(raw_text))):
+                            ms, me = m.start(), m.end()
+                            # Extend the annotation that covers this match.
+                            # ±2 tolerance handles [[Name]] and {Name} marker wrappers.
+                            con.execute(
+                                "UPDATE Annotation SET end_char = end_char + ? "
+                                "WHERE log_id = ? AND start_char IS NOT NULL "
+                                "AND start_char >= ? AND start_char <= ? "
+                                "AND end_char >= ? AND end_char <= ?",
+                                (delta, log_id, ms - 2, ms + 1, me - 1, me + 2),
+                            )
+                            # Shift every annotation that starts after this match.
+                            con.execute(
+                                "UPDATE Annotation "
+                                "SET start_char = start_char + ?, end_char = end_char + ? "
+                                "WHERE log_id = ? AND start_char IS NOT NULL AND start_char > ?",
+                                (delta, delta, log_id, me),
+                            )
 
             # Update annotation values
             con.execute(
