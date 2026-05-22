@@ -342,6 +342,7 @@ interface Props {
   onTagClick: (tag: string) => void
   refreshKey?: number
   onBack?: () => void
+  crossPageBack?: boolean
   onEditingChange?: (editing: boolean) => void
   autoEdit?: boolean
   onAutoEditConsumed?: () => void
@@ -1048,6 +1049,7 @@ export default function CenterPane({
   onTagClick,
   refreshKey,
   onBack,
+  crossPageBack,
   onEditingChange,
   autoEdit,
   onAutoEditConsumed,
@@ -1159,7 +1161,7 @@ export default function CenterPane({
           {onBack && (
             <button
               onClick={onBack}
-              className="md:hidden text-gray-400 hover:text-gray-600 p-1 -ml-1"
+              className={`${crossPageBack ? '' : 'md:hidden '}text-gray-400 hover:text-gray-600 p-1 -ml-1`}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
             </button>

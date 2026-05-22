@@ -192,6 +192,7 @@ export default function App() {
                   }
                   setMobileView('list')
                 }}
+                crossPageBack={returnPage !== null}
                 onEditingChange={setEditing}
                 autoEdit={pendingEdit}
                 onAutoEditConsumed={() => setPendingEdit(false)}
