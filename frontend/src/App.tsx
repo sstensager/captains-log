@@ -18,6 +18,7 @@ export default function App() {
   const [composing, setComposing] = useState(false)
   const [entityToNavigate, setEntityToNavigate] = useState<string | null>(null)
   const [returnLogId, setReturnLogId] = useState<number | null>(null)
+  const [returnPage, setReturnPage] = useState<Page | null>(null)
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const [mobileView, setMobileView] = useState<MobileView>('list')
   const [editing, setEditing] = useState(false)
@@ -94,8 +95,18 @@ export default function App() {
   const handleSelectLogFromEntity = (id: number) => {
     setPage('logs')
     setSelectedLogId(id)
+    // entityToNavigate preserved intentionally — needed to restore entity detail on Back
+    setReturnLogId(null)
+    setReturnPage('entities')
+    setMobileView('detail')
+  }
+
+  const handleSelectLogFromTasks = (id: number) => {
+    setPage('logs')
+    setSelectedLogId(id)
     setEntityToNavigate(null)
     setReturnLogId(null)
+    setReturnPage('tasks')
     setMobileView('detail')
   }
 
@@ -104,6 +115,7 @@ export default function App() {
     setSelectedLogId(id)
     setEntityToNavigate(null)
     setReturnLogId(null)
+    setReturnPage('tasks')
     setMobileView('detail')
     setPendingEdit(true)
   }
@@ -134,7 +146,7 @@ export default function App() {
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => { setPage(key); setEntityToNavigate(null); setReturnLogId(null) }}
+            onClick={() => { setPage(key); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null) }}
             className={`text-sm px-3 py-1 rounded transition-colors ${
               page === key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
             }`}
@@ -173,7 +185,13 @@ export default function App() {
                 onLogUpdated={handleLogUpdated}
                 onEntityClick={handleEntityClick}
                 onTagClick={handleTagClick}
-                onBack={() => setMobileView('list')}
+                onBack={() => {
+                  if (returnPage) {
+                    setPage(returnPage)
+                    setReturnPage(null)
+                  }
+                  setMobileView('list')
+                }}
                 onEditingChange={setEditing}
                 autoEdit={pendingEdit}
                 onAutoEditConsumed={() => setPendingEdit(false)}
@@ -187,7 +205,7 @@ export default function App() {
             onBack={returnLogId !== null ? handleBackFromEntity : undefined}
           />
         ) : (
-          <TasksPage onSelectLog={handleSelectLogFromEntity} onEditLog={handleEditLogFromTasks} />
+          <TasksPage onSelectLog={handleSelectLogFromTasks} onEditLog={handleEditLogFromTasks} />
         )}
       </div>
 
@@ -196,7 +214,7 @@ export default function App() {
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => { setPage(key); setMobileView('list'); setEntityToNavigate(null); setReturnLogId(null) }}
+            onClick={() => { setPage(key); setMobileView('list'); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null) }}
             className={`flex-1 py-3 text-xs font-medium transition-colors ${
               page === key ? 'text-gray-900' : 'text-gray-400'
             }`}
