@@ -1,6 +1,6 @@
 # Captain's Log — TODO
 
-*Last updated: 2026-05-22 (session 4)*
+*Last updated: 2026-05-22 (session 5)*
 
 ---
 
@@ -10,6 +10,16 @@
 - "What did we think about the campsites at Kirk Creek?"
 - "What are Beth's kids' names?"
 - "What did we order last time at Osteria Mozza?"
+
+---
+
+## Recently Shipped (session 2026-05-22, session 5)
+
+- **User tags** — separate `user_tags` column (parser never overwrites); TagEditor in both read and edit view; LLM tags (gray, clickable) + user tags (indigo, removable ×); `+ tag` dropdown autocomplete from ~40-tag vocabulary; LeftRail filter checks both columns
+- **Expanded tag vocabulary** — parser prompt expanded from 12 → ~40 labels grouped by category (restaurants, camping, fitness, renovation, movies, etc.) with free-form escape hatch
+- **Date extraction** — parser now emits `date_ref` annotations (type=date_ref, text_span="last Tuesday", value="2026-05-19"); resolution always anchored to `created_at`, not reparse date; invisible to existing chip/highlight UI — stored for NLQ use
+- **Tasks filter persistence** — filter state (entity/tag/search + open/done) preserved when navigating Tasks → log → back
+- **Entity context on log navigate** — navigating entity → log → back now re-selects the correct entity
 
 ---
 
@@ -73,7 +83,63 @@
 
 ## ⬅ START HERE NEXT SESSION
 
-No active items — see backlog below.
+**Natural Language Query (NLQ)** — designed and ready to build. See design notes below.
+
+**Entity attribute enrichment (schemaless metadata)** — designed and ready to build. See design notes below.
+
+---
+
+## Design Notes (carry into next session)
+
+### Natural Language Query (NLQ)
+
+**Architecture:** Parse → Retrieve → Synthesize. Two gpt-4o-mini calls per query, ~$0.0001.
+
+**Stage 1 — `nlq.py` (new file):**
+- `QueryPlan` Pydantic model: `entity_names: list[str]`, `date_range: {start, end} | None`, `keywords: list[str]`, `tags: list[str]`, `intent: str`
+- `parse_query(question, today) → QueryPlan` — structured LLM output
+- `synthesize_answer(question, logs) → str | None` — 2–3 sentence answer, `max_tokens=150`
+- Rule: `"last time"` → `date_range=null` (sort handles it); `"last month"` → ISO interval
+
+**Stage 2 — `retrieval.py` addition:**
+- `retrieve_for_query(con, plan, limit=10) → list[dict]`
+- Entity pass (score +3.0 + confidence) → FTS pass (score +normalized) → date hard-filter (Log.created_at OR date_ref annotation value in range) → tag hard-filter → sort DESC
+
+**Stage 3 — `server.py`:**
+- `GET /api/query?q=...&synthesize=true` → `QueryResponse { answer, logs, filters }`
+- `QueryResponse` type in `types.ts`; `naturalLanguageQuery()` in `api.ts`
+
+**UI — LeftRail:**
+- "Ask" button (sparkle/✦ icon) appears when query looks like a question (contains `?` or starts with what/who/where/when/which)
+- NLQ is explicit-submit (Enter), not debounced live search
+- Results replace log list: synthesized answer panel at top (collapsible) + source logs below
+- "Clear" restores normal mode
+
+**Key design decisions already made:**
+- Tags/synthesis handles the "Dario's is a restaurant" gap — entity type is `place`, retrieval uses `tags: ["restaurants"]`, synthesis reads context and filters to restaurant visits
+- date_ref annotations (already shipping) power the date filter for notes like "went there last month" written today
+
+---
+
+### Entity Attribute Enrichment (schemaless metadata)
+
+**The problem it solves:** The system knows Dario's is a `place` but not that it's a restaurant. NLQ uses tag+synthesis as a workaround, but the real fix is entity-level metadata: `venue_type: restaurant`, `cuisine: Italian`, `price: $$`. These attributes enable `WHERE entity.attributes INCLUDE venue_type=restaurant` in NLQ.
+
+**Infrastructure already exists:** `Attribute` table has `entity_id, key, value, attr_type, provenance, source_log_id`. Entity detail page already shows attributes. The missing piece is the write path.
+
+**Design:**
+- **Async enrichment job** (preferred over parser-time): when entity page opens (or on a background cron), read all `EntityReference.excerpt` rows for that entity and run one gpt-4o-mini call:
+  > "Based on these log excerpts, what key facts do you know about [Dario's]? Return as key:value pairs. Examples: venue_type, cuisine, price_range, neighborhood, hours, vibe."
+- Store results as `Attribute` rows with `provenance='auto:enrichment'`, `confidence` score
+- User can view, edit, or add attributes on the entity detail page (UI already shows attributes)
+- NLQ can then filter by `WHERE EXISTS (SELECT 1 FROM Attribute WHERE entity_id=e.id AND key='venue_type' AND value='restaurant')`
+
+**UI additions needed:**
+- Entity detail: inline key/value editor for adding/editing attributes (user provenance)
+- "Enrich" button on entity detail to trigger the enrichment job on demand
+- NLQ filter: `type:restaurant` or `venue_type:restaurant` syntax in the query parser
+
+**Files to touch:** `server.py` (enrichment endpoint), `db.py` (no schema change needed), frontend `EntitiesPage` (attribute edit UI)
 
 ---
 
@@ -85,9 +151,10 @@ No active items — see backlog below.
 - [ ] Quick-add todo on mobile: when a filter is active, ≤2 taps to add a new todo to a filtered entity/tag
 
 ### Entities
-- [ ] Date extraction — detect "last Tuesday", "March 15th" as time references
-- [ ] Natural language query ("what did we think about Kirk Creek?")
+- [ ] Natural language query — see design notes above (next session priority)
+- [ ] Entity attribute enrichment — schemaless metadata per entity; see design notes above
 - [ ] Semantic search (LogEmbedding table exists, not wired to UI)
+- [ ] Timeline / journal view — group log list by today / yesterday / this week (UI approach TBD)
 
 ### Infrastructure / Later
 - [ ] Voice input — Whisper → same parse path as text
