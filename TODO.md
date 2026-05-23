@@ -15,7 +15,8 @@
 
 ## Recently Shipped (session 2026-05-22, session 4)
 
-- **Entity rename rewrites raw text** — renaming an entity updates all affected log raw text (`\bOldName\b` → `NewName`, word-boundary regex), annotation values, and FTS index in one transaction. Conflict check returns 409 if new name already exists. Frontend shows a confirmation banner ("Rename X → Y? This will rewrite N notes. Cannot be undone.") before firing for entities with any mentions; zero-mention entities rename silently.
+- **Entity rename rewrites raw text** — renaming an entity updates all affected log raw text (`\bOldName\b` → `NewName`, word-boundary regex), annotation values, annotation char spans, and FTS index in one transaction. Conflict check returns 409 if new name already exists. Frontend shows a confirmation banner ("Rename X → Y? This will rewrite N notes. Cannot be undone.") before firing for entities with any mentions; zero-mention entities rename silently.
+- **Fix promote: accepted suggestion stays dashed** — stale LLM annotations shared `span_start` with new user annotation after promotion, occasionally rendering first (dashed) and blocking the user annotation. Fix: promote endpoint now clears all `provenance != 'user'` annotations (not just `provenance = 'text'`) before re-running `extract_links`.
 
 ---
 
@@ -84,7 +85,6 @@ No active items — see backlog below.
 - [ ] Quick-add todo on mobile: when a filter is active, ≤2 taps to add a new todo to a filtered entity/tag
 
 ### Entities
-- [ ] Alias table — `EntityAlias(entity_id, alias_name)`; rename creates alias; old notes stay linked
 - [ ] Date extraction — detect "last Tuesday", "March 15th" as time references
 - [ ] Natural language query ("what did we think about Kirk Creek?")
 - [ ] Semantic search (LogEmbedding table exists, not wired to UI)
