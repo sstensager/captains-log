@@ -654,12 +654,12 @@ def promote_annotation(ann_id: int, background_tasks: BackgroundTasks):
     con.execute("UPDATE Log SET raw_text = ? WHERE id = ?", (new_text, log_id))
     con.commit()
 
-    # Delete the promoted annotation plus all stale text-provenance annotations —
-    # their positions shift whenever text length changes, so recreate them fresh.
+    # Delete the promoted annotation plus all stale non-user annotations —
+    # text length changes invalidate stored char positions for LLM and text annotations alike.
     con.execute("DELETE FROM EntityReference WHERE annotation_id = ?", (ann_id,))
     con.execute("DELETE FROM Annotation WHERE id = ?", (ann_id,))
     con.execute(
-        "DELETE FROM Annotation WHERE log_id = ? AND provenance = 'text'", (log_id,)
+        "DELETE FROM Annotation WHERE log_id = ? AND provenance != 'user'", (log_id,)
     )
     con.commit()
     extract_links(log_id, new_text, con)
