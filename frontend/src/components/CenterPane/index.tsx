@@ -402,6 +402,24 @@ function applyIndent(
   }
 }
 
+// ── Smart paste: normalize indentation + convert common bullet formats ────────
+
+function processSmartPaste(text: string): string {
+  return text.split('\n').map(line => {
+    // Tab → 2-space indentation
+    const withSpaces = line.replace(/^\t+/, t => '  '.repeat(t.length))
+    const trimmed = withSpaces.trimStart()
+    const indent = withSpaces.slice(0, withSpaces.length - trimmed.length)
+    // Unicode/typographic bullets → app dash bullet
+    const ubullet = trimmed.match(/^[•·▪▸►▶➤➢]\s+(.*)/)
+    if (ubullet) return indent + '- ' + ubullet[1]
+    // Numbered list (1. or 1)) → dash bullet
+    const numbered = trimmed.match(/^\d+[.)]\s+(.*)/)
+    if (numbered) return indent + '- ' + numbered[1]
+    return withSpaces
+  }).join('\n')
+}
+
 // ── Smart textarea with [[ entity autocomplete ────────────────────────────────
 
 function SmartTextarea({
@@ -502,6 +520,21 @@ function SmartTextarea({
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange(e.target.value)
     detectLink(e.target.value, e.target.selectionStart)
+  }
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const raw = e.clipboardData.getData('text/plain')
+    if (!raw) return
+    const processed = processSmartPaste(raw)
+    if (processed === raw) return // nothing to transform — let browser paste normally
+    e.preventDefault()
+    const ta = e.currentTarget
+    const { selectionStart: ss, selectionEnd: se, value: v } = ta
+    const newVal = v.slice(0, ss) + processed + v.slice(se)
+    onChange(newVal)
+    const newPos = ss + processed.length
+    selAfter.current = { start: newPos, end: newPos }
+    detectLink(newVal, newPos)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -643,6 +676,7 @@ function SmartTextarea({
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           onSelect={(e) => {
             const ta = e.currentTarget
             savedSel.current = { start: ta.selectionStart, end: ta.selectionEnd }
@@ -843,11 +877,15 @@ function EditView({
   annotations,
   onSave,
   onCancel,
+  onBack,
+  crossPageBack,
 }: {
   initialText: string
   annotations?: Annotation[]
   onSave: (text: string) => void
   onCancel: () => void
+  onBack?: () => void
+  crossPageBack?: boolean
 }) {
   const [text, setText] = useState(initialText)
   const [saving, setSaving] = useState(false)
@@ -869,9 +907,24 @@ function EditView({
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0">
+      {/* Back button — mobile only, cross-page navigation */}
+      {crossPageBack && onBack && (
+        <div className="md:hidden shrink-0 flex items-center px-3 py-2 border-b border-gray-100 bg-white">
+          <button onClick={onBack} className="text-gray-400 hover:text-gray-600 p-1 -ml-1">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+        </div>
+      )}
       {/* Header — desktop only; mobile gets Save/Cancel in the toolbar row */}
       <div className="hidden md:flex shrink-0 items-center justify-between px-6 py-3 border-b border-gray-200 bg-white">
-        <span className="text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
+        <div className="flex items-center gap-3">
+          {crossPageBack && onBack && (
+            <button onClick={onBack} className="text-gray-400 hover:text-gray-600 p-1 -ml-1">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+          )}
+          <span className="text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
+        </div>
         <div className="flex gap-2">
           <button onClick={onCancel} className="text-sm text-gray-400 hover:text-gray-700 transition-colors">Cancel</button>
           <button
@@ -1105,6 +1158,8 @@ export default function CenterPane({
         initialText={log.raw_text}
         annotations={log.annotations}
         onCancel={() => enterEditing(false)}
+        onBack={onBack}
+        crossPageBack={crossPageBack}
         onSave={async (text) => {
           const updated = await updateLog(log.id, text)
           setLog({ ...log, raw_text: updated.raw_text, annotations: [], tags: updated.tags })

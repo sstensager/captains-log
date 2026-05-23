@@ -11,7 +11,7 @@ export default function EntitiesPage({
   initialEntity,
   onBack,
 }: {
-  onSelectLog: (id: number) => void
+  onSelectLog: (id: number, fromEntity?: string) => void
   initialEntity?: string
   onBack?: () => void
 }) {
@@ -235,7 +235,7 @@ export default function EntitiesPage({
             </div>
             <EntityDetailView
               entity={selected}
-              onSelectLog={onSelectLog}
+              onSelectLog={(id) => onSelectLog(id, selected.name)}
               onUpdated={updated => {
                 setSelected(updated)
                 setEntities(prev => prev.map(e =>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchAllTasks, patchTask } from '../../api'
-import type { TaskEntityRef, TaskOut } from '../../types'
+import type { TaskEntityRef, TaskOut, TasksActiveFilter, TasksStatusFilter } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate } from '../../utils/time'
 import AnnotatedText from '../AnnotatedText'
@@ -8,6 +8,9 @@ import AnnotatedText from '../AnnotatedText'
 interface Props {
   onSelectLog: (id: number) => void
   onEditLog?: (id: number) => void
+  initialFilter?: TasksActiveFilter
+  initialStatusFilter?: TasksStatusFilter
+  onSnapshot?: (filter: TasksActiveFilter, statusFilter: TasksStatusFilter) => void
 }
 
 // ── Snapshot types ────────────────────────────────────────────────────────────
@@ -29,13 +32,8 @@ interface SnapshotGroup {
   sections: SnapshotSection[]
 }
 
-type StatusFilter = 'open' | 'done'
-
-type ActiveFilter =
-  | { kind: 'search'; query: string }
-  | { kind: 'tag'; value: string }
-  | { kind: 'entity'; value: string }
-  | null
+type StatusFilter = TasksStatusFilter
+type ActiveFilter = TasksActiveFilter
 
 function matchesFilter(task: TaskOut, filter: ActiveFilter): boolean {
   if (!filter) return true
@@ -105,14 +103,18 @@ function EntityChip({ entity, onClick }: { entity: TaskEntityRef; onClick?: () =
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function TasksPage({ onSelectLog, onEditLog }: Props) {
+export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initialStatusFilter, onSnapshot }: Props) {
   const [tasks, setTasks] = useState<TaskOut[]>([])
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('open')
-  const [filter, setFilter] = useState<ActiveFilter>(null)
-  const [searchInput, setSearchInput] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatusFilter ?? 'open')
+  const [filter, setFilter] = useState<ActiveFilter>(initialFilter ?? null)
+  const [searchInput, setSearchInput] = useState(
+    initialFilter?.kind === 'search' ? initialFilter.query : ''
+  )
   const [snapshotGroups, setSnapshotGroups] = useState<SnapshotGroup[]>([])
-  const [viewMode, setViewMode] = useState<'flat' | 'grouped'>('grouped')
+  const [viewMode, setViewMode] = useState<'flat' | 'grouped'>(
+    initialFilter != null ? 'flat' : 'grouped'
+  )
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
 
   // Keep a ref so we can rebuild the snapshot without adding tasks as a dep
@@ -181,6 +183,15 @@ export default function TasksPage({ onSelectLog, onEditLog }: Props) {
     const already = filter?.kind === kind && (filter as any).value === value
     if (already) { setFilter(null); setSearchInput(''); setViewMode('grouped') }
     else { setFilter({ kind, value }); setSearchInput(''); setViewMode('flat') }
+  }
+
+  const navigateToLog = (logId: number, editMode: boolean) => {
+    onSnapshot?.(filter, statusFilter)
+    if (editMode && onEditLog) {
+      onEditLog(logId)
+    } else {
+      onSelectLog(logId)
+    }
   }
 
   // Live counts (always up-to-date even without snapshot rebuild)
@@ -470,7 +481,7 @@ export default function TasksPage({ onSelectLog, onEditLog }: Props) {
                     ? [
                         <button
                           key={`${group.key}-s${si}`}
-                          onClick={() => group.source_log_id && onSelectLog(group.source_log_id)}
+                          onClick={() => group.source_log_id && navigateToLog(group.source_log_id, false)}
                           className="w-full px-4 py-1.5 text-xs text-gray-400 italic bg-gray-50 border-t border-gray-100 text-left hover:bg-gray-100 active:bg-gray-200 transition-colors flex items-center gap-2"
                         >
                           <span className="flex-1 min-w-0"><AnnotatedText text={section.header} /></span>
@@ -533,7 +544,7 @@ export default function TasksPage({ onSelectLog, onEditLog }: Props) {
                     <div key={si}>
                       {section.header && (
                         <button
-                          onClick={() => group.source_log_id && (onEditLog ?? onSelectLog)(group.source_log_id)}
+                          onClick={() => group.source_log_id && navigateToLog(group.source_log_id, true)}
                           className="w-full px-4 py-1.5 text-xs text-gray-400 italic bg-gray-50 border-b border-gray-100 text-left hover:bg-gray-100 active:bg-gray-200 transition-colors flex items-center gap-2"
                         >
                           <span className="flex-1 min-w-0"><AnnotatedText text={section.header} /></span>

@@ -3,7 +3,7 @@ import LeftRail from './components/LeftRail'
 import CenterPane from './components/CenterPane'
 import EntitiesPage from './components/EntitiesPage'
 import TasksPage from './components/TasksPage'
-import type { LogDetail, LogSummary } from './types'
+import type { LogDetail, LogSummary, TasksActiveFilter, TasksStatusFilter } from './types'
 import { fetchLogs } from './api'
 
 type Page = 'logs' | 'entities' | 'tasks'
@@ -23,6 +23,8 @@ export default function App() {
   const [mobileView, setMobileView] = useState<MobileView>('list')
   const [editing, setEditing] = useState(false)
   const [pendingEdit, setPendingEdit] = useState(false)
+  const [tasksFilter, setTasksFilter] = useState<TasksActiveFilter>(null)
+  const [tasksStatusFilter, setTasksStatusFilter] = useState<TasksStatusFilter>('open')
 
   useEffect(() => {
     fetchLogs().then(data => { setLogs(data); setLoading(false) })
@@ -92,10 +94,10 @@ export default function App() {
     setPage('entities')
   }
 
-  const handleSelectLogFromEntity = (id: number) => {
+  const handleSelectLogFromEntity = (id: number, entityName?: string) => {
     setPage('logs')
     setSelectedLogId(id)
-    // entityToNavigate preserved intentionally — needed to restore entity detail on Back
+    setEntityToNavigate(entityName ?? null)
     setReturnLogId(null)
     setReturnPage('entities')
     setMobileView('detail')
@@ -146,7 +148,7 @@ export default function App() {
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => { setPage(key); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null) }}
+            onClick={() => { setPage(key); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
             className={`text-sm px-3 py-1 rounded transition-colors ${
               page === key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
             }`}
@@ -206,7 +208,13 @@ export default function App() {
             onBack={returnLogId !== null ? handleBackFromEntity : undefined}
           />
         ) : (
-          <TasksPage onSelectLog={handleSelectLogFromTasks} onEditLog={handleEditLogFromTasks} />
+          <TasksPage
+            onSelectLog={handleSelectLogFromTasks}
+            onEditLog={handleEditLogFromTasks}
+            initialFilter={tasksFilter}
+            initialStatusFilter={tasksStatusFilter}
+            onSnapshot={(f, s) => { setTasksFilter(f); setTasksStatusFilter(s) }}
+          />
         )}
       </div>
 
@@ -215,7 +223,7 @@ export default function App() {
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => { setPage(key); setMobileView('list'); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null) }}
+            onClick={() => { setPage(key); setMobileView('list'); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
             className={`flex-1 py-3 text-xs font-medium transition-colors ${
               page === key ? 'text-gray-900' : 'text-gray-400'
             }`}

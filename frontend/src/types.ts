@@ -104,3 +104,10 @@ export interface AdminStats {
   entities: number
   embeddings: number
 }
+
+export type TasksStatusFilter = 'open' | 'done'
+export type TasksActiveFilter =
+  | { kind: 'search'; query: string }
+  | { kind: 'tag'; value: string }
+  | { kind: 'entity'; value: string }
+  | null
