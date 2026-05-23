@@ -380,9 +380,11 @@ def _bg_parse_and_promote(log_id: int, raw_text: str) -> None:
     con = init_db()
     try:
         known = _fetch_known_entities(con)
+        log_date_row = con.execute("SELECT DATE(created_at) FROM Log WHERE id = ?", (log_id,)).fetchone()
+        log_date = log_date_row[0] if log_date_row else None
         extract_todos(log_id, raw_text, con)
         extract_links(log_id, raw_text, con)
-        annotate_log(log_id, raw_text, con, known_entities=known or None)
+        annotate_log(log_id, raw_text, con, known_entities=known or None, log_date=log_date)
         # Write {Name} markers for LLM detections, then re-derive annotations from text
         new_text = write_suggested_markers(log_id, raw_text, con)
         if new_text != raw_text:
@@ -403,6 +405,8 @@ def _bg_reparse(log_id: int, raw_text: str) -> None:
     con = init_db()
     try:
         known = _fetch_known_entities(con)
+        log_date_row = con.execute("SELECT DATE(created_at) FROM Log WHERE id = ?", (log_id,)).fetchone()
+        log_date = log_date_row[0] if log_date_row else None
 
         # Collect rejected names from prior non-text, non-user annotations
         prior = con.execute(
@@ -435,7 +439,8 @@ def _bg_reparse(log_id: int, raw_text: str) -> None:
         annotate_log(log_id, raw_text, con,
                      rejected_names=rejected_names or None,
                      confirmed_names=confirmed_names or None,
-                     known_entities=known or None)
+                     known_entities=known or None,
+                     log_date=log_date)
 
         # Write {Name} for any newly detected entities not already in text
         new_text = write_suggested_markers(log_id, raw_text, con)

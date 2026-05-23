@@ -61,6 +61,7 @@ def annotate_log(
     rejected_names: list[str] | None = None,
     confirmed_names: list[str] | None = None,
     known_entities: list[tuple[str, str]] | None = None,
+    log_date: str | None = None,
 ) -> ParseResult:
     """
     Run the parser against an already-inserted log row.
@@ -70,8 +71,10 @@ def annotate_log(
     rejected_names  — entity names the user has dismissed; LLM should skip them.
     confirmed_names — names already handled via [[]] links; LLM should skip them.
     known_entities  — (name, type) tuples from the entity library; LLM should bias toward tagging these.
+    log_date        — ISO date the log was originally created (used for relative date resolution).
+                      Defaults to today, which is correct for freshly-created logs.
     """
-    current_date = datetime.date.today().isoformat()
+    current_date = log_date or datetime.date.today().isoformat()
 
     messages = [
         {"role": "system", "content": _build_system_prompt(current_date)},
@@ -227,4 +230,23 @@ Focus on the activity or subject, not the people or places involved.
 Examples: travel, family, health, food, shopping, work, kids, social, finance, home, memory, planning
 Be consistent — notes about the same kind of thing should share tags.
 
-Leave annotations as an empty list []."""
+━━━ DATE REFERENCES ━━━
+Extract time references that can be resolved to a specific date or narrow date range.
+Return these as annotations (not mentions).
+
+For each date reference:
+  type       — always "date_ref"
+  text_span  — exact text as it appears in the note (e.g. "last Tuesday", "March 15th")
+  value      — resolved ISO 8601 date (YYYY-MM-DD). For week-level references, use the
+               midpoint of the week. For month-level, use the 15th of that month.
+               Always resolve relative to today's date: {current_date}
+  confidence — 0.85 for explicit calendar dates ("March 15th", "May 3rd 2025")
+               0.70 for clear relative references ("last Tuesday", "yesterday", "last week")
+               0.50 for fuzzy ranges ("a couple weeks ago", "earlier this month")
+
+INCLUDE: explicit dates, days of the week with a qualifier (last/next/this), named time
+periods ("last week", "last month", "last summer"), or fuzzy-but-resolvable ranges.
+
+EXCLUDE: vague temporal language that can't be resolved ("recently", "a while back",
+"the other day", "soon", "someday", "eventually", "last time"). Also exclude dates
+that are clearly future tasks or plans — those belong in the task title, not here."""
