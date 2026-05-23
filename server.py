@@ -105,6 +105,7 @@ class LogSummary(BaseModel):
     source: str
     annotation_types: list[str]
     tags: list[str] = []
+    user_tags: list[str] = []
 
 
 class LogDetail(BaseModel):
@@ -115,6 +116,7 @@ class LogDetail(BaseModel):
     source: str
     annotations: list[AnnotationOut]
     tags: list[str] = []
+    user_tags: list[str] = []
 
 
 class LogCreate(BaseModel):
@@ -124,6 +126,10 @@ class LogCreate(BaseModel):
 class AnnotationPatch(BaseModel):
     status: str
     corrected_value: Optional[str] = None
+
+
+class LogTagsPatch(BaseModel):
+    user_tags: list[str]
 
 
 class TaskEntityRef(BaseModel):
@@ -236,7 +242,7 @@ def _annotation_types_for_log(con, log_id: int) -> list[str]:
 
 
 def _log_summary(con, row) -> LogSummary:
-    log_id, raw_text, created_at, updated_at, source_type, tags_json = row
+    log_id, raw_text, created_at, updated_at, source_type, tags_json, user_tags_json = row
     return LogSummary(
         id=log_id,
         raw_text=raw_text,
@@ -245,6 +251,7 @@ def _log_summary(con, row) -> LogSummary:
         source=source_type,
         annotation_types=_annotation_types_for_log(con, log_id),
         tags=json.loads(tags_json or '[]'),
+        user_tags=json.loads(user_tags_json or '[]'),
     )
 
 
@@ -254,7 +261,7 @@ def _log_summary(con, row) -> LogSummary:
 def list_logs():
     con = _get_con()
     rows = con.execute(
-        "SELECT id, raw_text, created_at, updated_at, source_type, tags FROM Log ORDER BY created_at DESC"
+        "SELECT id, raw_text, created_at, updated_at, source_type, tags, user_tags FROM Log ORDER BY created_at DESC"
     ).fetchall()
     return [_log_summary(con, r) for r in rows]
 
@@ -264,7 +271,7 @@ def search_logs(q: str = ""):
     con = _get_con()
     if not q.strip():
         rows = con.execute(
-            "SELECT id, raw_text, created_at, updated_at, source_type, tags FROM Log ORDER BY created_at DESC"
+            "SELECT id, raw_text, created_at, updated_at, source_type, tags, user_tags FROM Log ORDER BY created_at DESC"
         ).fetchall()
         return [_log_summary(con, r) for r in rows]
 
@@ -277,7 +284,7 @@ def search_logs(q: str = ""):
     order = {lid: i for i, lid in enumerate(log_ids)}
     placeholders = ",".join("?" * len(log_ids))
     rows = con.execute(
-        f"SELECT id, raw_text, created_at, updated_at, source_type, tags FROM Log WHERE id IN ({placeholders})",
+        f"SELECT id, raw_text, created_at, updated_at, source_type, tags, user_tags FROM Log WHERE id IN ({placeholders})",
         log_ids,
     ).fetchall()
     rows = sorted(rows, key=lambda r: order.get(r[0], 999))
@@ -288,7 +295,7 @@ def search_logs(q: str = ""):
 def get_log(log_id: int):
     con = _get_con()
     row = con.execute(
-        "SELECT id, raw_text, created_at, updated_at, source_type, tags FROM Log WHERE id = ?",
+        "SELECT id, raw_text, created_at, updated_at, source_type, tags, user_tags FROM Log WHERE id = ?",
         (log_id,),
     ).fetchone()
     if not row:
@@ -309,6 +316,7 @@ def get_log(log_id: int):
         source=row[4],
         annotations=[_row_to_annotation(r) for r in ann_rows],
         tags=json.loads(row[5] or '[]'),
+        user_tags=json.loads(row[6] or '[]'),
     )
 
 
@@ -330,12 +338,23 @@ def update_log(log_id: int, body: LogCreate, background_tasks: BackgroundTasks):
     background_tasks.add_task(_bg_reparse, log_id, text)
 
     row2 = con.execute(
-        "SELECT id, raw_text, created_at, updated_at, source_type, tags FROM Log WHERE id = ?", (log_id,)
+        "SELECT id, raw_text, created_at, updated_at, source_type, tags, user_tags FROM Log WHERE id = ?", (log_id,)
     ).fetchone()
     return LogDetail(
         id=row2[0], raw_text=row2[1], created_at=row2[2], updated_at=row2[3], source=row2[4],
-        annotations=[], tags=json.loads(row2[5] or '[]'),
+        annotations=[], tags=json.loads(row2[5] or '[]'), user_tags=json.loads(row2[6] or '[]'),
     )
+
+
+@app.patch("/api/logs/{log_id}/tags", response_model=LogDetail)
+def patch_log_tags(log_id: int, body: LogTagsPatch):
+    con = _get_con()
+    if not con.execute("SELECT 1 FROM Log WHERE id = ?", (log_id,)).fetchone():
+        raise HTTPException(status_code=404, detail="Log not found")
+    clean = [t.strip().lower() for t in body.user_tags if t.strip()]
+    con.execute("UPDATE Log SET user_tags = ? WHERE id = ?", (json.dumps(clean), log_id))
+    con.commit()
+    return _get_log_detail(log_id)
 
 
 @app.post("/api/logs", response_model=LogDetail, status_code=201)
@@ -720,7 +739,7 @@ def _get_log_detail(log_id: int) -> LogDetail:
     """Return a LogDetail with current annotations (pre-reparse snapshot)."""
     con = _get_con()
     row = con.execute(
-        "SELECT id, raw_text, created_at, updated_at, source_type, tags FROM Log WHERE id = ?", (log_id,)
+        "SELECT id, raw_text, created_at, updated_at, source_type, tags, user_tags FROM Log WHERE id = ?", (log_id,)
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Log not found")
@@ -731,7 +750,7 @@ def _get_log_detail(log_id: int) -> LogDetail:
     annotations = [_row_to_annotation(r) for r in ann_rows]
     return LogDetail(
         id=row[0], raw_text=row[1], created_at=row[2], updated_at=row[3], source=row[4],
-        annotations=annotations, tags=json.loads(row[5] or '[]'),
+        annotations=annotations, tags=json.loads(row[5] or '[]'), user_tags=json.loads(row[6] or '[]'),
     )
 
 

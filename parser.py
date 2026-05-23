@@ -226,9 +226,21 @@ prefer lower confidence over wrong type.
 
 ━━━ TAGS ━━━
 Return 1–4 lowercase tags describing what this note is about.
-Focus on the activity or subject, not the people or places involved.
-Examples: travel, family, health, food, shopping, work, kids, social, finance, home, memory, planning
-Be consistent — notes about the same kind of thing should share tags.
+Focus on the activity or subject, not the people or places.
+Pick the most specific matching tag. Prefer vocabulary tags over free-form.
+
+Food & drink:    restaurants, cooking, coffee, bars, wine, groceries, food
+Travel:          camping, hiking, road-trips, hotels, flights, travel
+People:          family, friends, kids, dates, social
+Health:          fitness, medical, sleep, wellness, health
+Home:            renovation, repairs, garden, chores, errands, home
+Work:            meetings, projects, decisions, work
+Finance:         expenses, budget, investments, taxes, finance
+Entertainment:   movies, books, music, tv, sports, games
+Ideas & plans:   ideas, research, learning, planning
+Memory:          milestone, reflection, memory, shopping
+
+You may add 1 free-form tag if none of the above fit the note well.
 
 ━━━ DATE REFERENCES ━━━
 Extract time references that can be resolved to a specific date or narrow date range.

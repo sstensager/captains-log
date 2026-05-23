@@ -1,9 +1,23 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import EmptyState from './EmptyState'
-import { fetchLog, createLog, fetchTasks, patchTask, updateLog, patchAnnotation, promoteAnnotation, relinkAnnotation, fetchEntities } from '../../api'
+import { fetchLog, createLog, fetchTasks, patchTask, updateLog, patchAnnotation, promoteAnnotation, relinkAnnotation, fetchEntities, patchLogTags } from '../../api'
 import type { Annotation, EntitySummary, LogDetail, TaskOut } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate, shortTime } from '../../utils/time'
+
+// Suggested tag vocabulary (mirrors parser prompt — used for autocomplete)
+const TAG_VOCABULARY = [
+  'restaurants', 'cooking', 'coffee', 'bars', 'wine', 'groceries', 'food',
+  'camping', 'hiking', 'road-trips', 'hotels', 'flights', 'travel',
+  'family', 'friends', 'kids', 'dates', 'social',
+  'fitness', 'medical', 'sleep', 'wellness', 'health',
+  'renovation', 'repairs', 'garden', 'chores', 'errands', 'home',
+  'meetings', 'projects', 'decisions', 'work',
+  'expenses', 'budget', 'investments', 'taxes', 'finance',
+  'movies', 'books', 'music', 'tv', 'sports', 'games',
+  'ideas', 'research', 'learning', 'planning',
+  'milestone', 'reflection', 'memory', 'shopping',
+]
 
 const ENTITY_TYPES = new Set(['person', 'place', 'pet', 'organization', 'event', 'thing', 'idea'])
 const TODO_LINE_RE = /^\s*(?:[-*]\s+)?\[[ xX]?\]\s*(.*)/
@@ -825,6 +839,109 @@ function EditAnnotationChip({
   )
 }
 
+// ── Tag editor ────────────────────────────────────────────────────────────────
+
+function TagEditor({
+  logId,
+  llmTags,
+  userTags,
+  onTagClick,
+  onUserTagsChange,
+}: {
+  logId: number
+  llmTags: string[]
+  userTags: string[]
+  onTagClick?: (tag: string) => void
+  onUserTagsChange: (tags: string[]) => void
+}) {
+  const [adding, setAdding] = useState(false)
+  const [input, setInput] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const allTags = new Set([...llmTags, ...userTags])
+
+  const suggestions = TAG_VOCABULARY
+    .filter(t => !allTags.has(t) && (!input || t.includes(input.toLowerCase())))
+    .slice(0, 8)
+
+  const addTag = (tag: string) => {
+    const clean = tag.trim().toLowerCase()
+    if (!clean || allTags.has(clean)) { setInput(''); return }
+    const next = [...userTags, clean]
+    patchLogTags(logId, next).then(updated => onUserTagsChange(updated.user_tags))
+    setInput('')
+    setAdding(false)
+  }
+
+  const removeTag = (tag: string) => {
+    const next = userTags.filter(t => t !== tag)
+    patchLogTags(logId, next).then(updated => onUserTagsChange(updated.user_tags))
+  }
+
+  const hasAny = llmTags.length > 0 || userTags.length > 0
+
+  return (
+    <div className={`flex flex-wrap items-center gap-1.5 ${hasAny || adding ? 'mt-4' : 'mt-2'}`}>
+      {llmTags.map(tag => (
+        <button
+          key={tag}
+          onClick={() => onTagClick?.(tag)}
+          className="text-xs text-gray-400 bg-gray-100 hover:bg-gray-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+        >
+          {tag}
+        </button>
+      ))}
+      {userTags.map(tag => (
+        <span key={tag} className="inline-flex items-center gap-0.5 text-xs text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded">
+          <button onClick={() => onTagClick?.(tag)} className="hover:opacity-75 transition-opacity">{tag}</button>
+          <button
+            onClick={() => removeTag(tag)}
+            className="ml-0.5 opacity-50 hover:opacity-100 transition-opacity leading-none"
+            title="Remove tag"
+          >×</button>
+        </span>
+      ))}
+      {adding ? (
+        <div className="relative">
+          <input
+            ref={inputRef}
+            autoFocus
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); addTag(input) }
+              if (e.key === 'Escape') { setAdding(false); setInput('') }
+            }}
+            onBlur={() => { setTimeout(() => { setAdding(false); setInput('') }, 150) }}
+            placeholder="tag…"
+            className="text-xs border border-gray-300 rounded px-2 py-0.5 w-20 outline-none focus:border-indigo-400"
+          />
+          {suggestions.length > 0 && (
+            <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded shadow-sm z-20 py-1 min-w-max max-h-48 overflow-y-auto">
+              {suggestions.map(s => (
+                <button
+                  key={s}
+                  onMouseDown={() => addTag(s)}
+                  className="block w-full text-left px-3 py-0.5 text-xs hover:bg-gray-50 text-gray-700"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <button
+          onClick={() => setAdding(true)}
+          className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded border border-dashed border-gray-300 hover:border-gray-400 transition-colors"
+        >
+          + tag
+        </button>
+      )}
+    </div>
+  )
+}
+
 function EditAnnotationBar({
   annotations,
   dismissedIds,
@@ -879,6 +996,10 @@ function EditView({
   onCancel,
   onBack,
   crossPageBack,
+  logId,
+  llmTags,
+  userTags,
+  onUserTagsChange,
 }: {
   initialText: string
   annotations?: Annotation[]
@@ -886,6 +1007,10 @@ function EditView({
   onCancel: () => void
   onBack?: () => void
   crossPageBack?: boolean
+  logId?: number
+  llmTags?: string[]
+  userTags?: string[]
+  onUserTagsChange?: (tags: string[]) => void
 }) {
   const [text, setText] = useState(initialText)
   const [saving, setSaving] = useState(false)
@@ -965,6 +1090,16 @@ function EditView({
           }
         />
       </div>
+      {logId !== undefined && onUserTagsChange && (
+        <div className="shrink-0 px-4 md:px-8 pb-4 border-t border-gray-100 pt-3">
+          <TagEditor
+            logId={logId}
+            llmTags={llmTags ?? []}
+            userTags={userTags ?? []}
+            onUserTagsChange={onUserTagsChange}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -1160,9 +1295,13 @@ export default function CenterPane({
         onCancel={() => enterEditing(false)}
         onBack={onBack}
         crossPageBack={crossPageBack}
+        logId={log.id}
+        llmTags={log.tags}
+        userTags={log.user_tags}
+        onUserTagsChange={tags => setLog(prev => prev ? { ...prev, user_tags: tags } : prev)}
         onSave={async (text) => {
           const updated = await updateLog(log.id, text)
-          setLog({ ...log, raw_text: updated.raw_text, annotations: [], tags: updated.tags })
+          setLog({ ...log, raw_text: updated.raw_text, annotations: [], tags: updated.tags, user_tags: updated.user_tags })
           setTasks([])
           enterEditing(false)
           onLogUpdated(updated)
@@ -1310,19 +1449,16 @@ export default function CenterPane({
               </div>
             )}
 
-            {log.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-4">
-                {log.tags.map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => onTagClick(tag)}
-                    className="text-xs text-gray-400 bg-gray-100 hover:bg-gray-200 px-2 py-0.5 rounded transition-colors"
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            )}
+            <TagEditor
+              logId={log.id}
+              llmTags={log.tags}
+              userTags={log.user_tags}
+              onTagClick={onTagClick}
+              onUserTagsChange={tags => {
+                setLog(prev => prev ? { ...prev, user_tags: tags } : prev)
+                onLogUpdated({ ...log, user_tags: tags })
+              }}
+            />
 
             {parsing && (
               <p className="text-xs text-gray-400 italic mt-2">Parsing…</p>

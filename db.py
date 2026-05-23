@@ -143,6 +143,7 @@ def _run_migrations(con: sqlite3.Connection) -> None:
         "ALTER TABLE Task ADD COLUMN indent INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE Task ADD COLUMN section TEXT",
         "ALTER TABLE Log ADD COLUMN updated_at TEXT",
+        "ALTER TABLE Log ADD COLUMN user_tags TEXT NOT NULL DEFAULT '[]'",
     ]
     for sql in migrations:
         try:

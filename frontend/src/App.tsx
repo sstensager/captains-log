@@ -76,6 +76,7 @@ export default function App() {
       source: log.source,
       annotation_types: [],
       tags: [],
+      user_tags: [],
     }
     setLogs(prev => [summary, ...prev])
     setSelectedLogId(log.id)

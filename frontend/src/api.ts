@@ -45,6 +45,9 @@ export const createLog = (raw_text: string): Promise<LogDetail> =>
 export const updateLog = (id: number, raw_text: string): Promise<LogDetail> =>
   patch(`/logs/${id}`, { raw_text })
 
+export const patchLogTags = (id: number, user_tags: string[]): Promise<LogDetail> =>
+  patch(`/logs/${id}/tags`, { user_tags })
+
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
 export const fetchTasks = (logId: number): Promise<TaskOut[]> =>

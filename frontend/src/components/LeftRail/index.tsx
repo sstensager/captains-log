@@ -46,7 +46,7 @@ export default function LeftRail({
   }, [query])
 
   const displayedLogs = activeTag
-    ? logs.filter(l => l.tags.includes(activeTag))
+    ? logs.filter(l => l.tags.includes(activeTag) || l.user_tags.includes(activeTag))
     : logs
 
   return (

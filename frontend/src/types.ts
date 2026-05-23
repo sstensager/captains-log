@@ -30,11 +30,13 @@ export interface LogSummary {
   source: 'text' | 'voice'
   annotation_types: string[]
   tags: string[]
+  user_tags: string[]
 }
 
 export interface LogDetail extends LogSummary {
   annotations: Annotation[]
   tags: string[]
+  user_tags: string[]
 }
 
 export interface EntitySummary {
