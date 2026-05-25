@@ -297,10 +297,12 @@ function renderBody(
     const bulletM = !todoM && line.match(BULLET_LINE_RE)
 
     if (todoM) {
-      const title = todoM[1].trim()
+      const titleRaw = todoM[1]
+      const title = titleRaw.trim()
       const task = tasks.find(t => t.title === title)
       const done = task ? task.status === 'done' : false
       const indent = (line.match(/^(\s*)/)?.[1].length ?? 0) / 2
+      const titleStart = lineStart + line.length - titleRaw.length
       nodes.push(
         <div key={i} className="flex items-center gap-2 py-0.5" style={{ paddingLeft: `${indent * 1.25}rem` }}>
           <button
@@ -315,7 +317,7 @@ function renderBody(
             {done && '✓'}
           </button>
           <span className={`text-base leading-relaxed ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-            {title}
+            {renderLineHighlights(titleRaw, titleStart, annotations, onEntityClick, onRejectAnnotation, onPromoteAnnotation, onRelinkAnnotation)}
           </span>
         </div>
       )

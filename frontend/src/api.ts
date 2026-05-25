@@ -1,4 +1,4 @@
-import type { AdminStats, EntityDetail, EntitySummary, LogDetail, LogSummary, TaskOut } from './types'
+import type { AdminStats, EntityDetail, EntitySummary, LogDetail, LogSummary, QueryResponse, TaskOut } from './types'
 
 const BASE = '/api'
 
@@ -114,3 +114,10 @@ export const adminLoadFixtures = (embeddings = false) =>
 
 export const adminEmbed = () =>
   post('/admin/embed')
+
+// ── NLQ ───────────────────────────────────────────────────────────────────────
+
+export const naturalLanguageQuery = (q: string): Promise<QueryResponse> => {
+  const today = new Date().toISOString().slice(0, 10)
+  return get(`/query?q=${encodeURIComponent(q)}&today=${today}`)
+}

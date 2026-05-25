@@ -14,5 +14,12 @@ config.py
 sample_notes.md
 *.ipynb
 
+# Dev testing — local only, never publish
+seed_dev_data.py
+seed_food_logs.py
+seed_campsite_ratings.py
+test_nlq.py
+TESTING.md
+
 # v1 archive — kept locally, not published
 _archive/

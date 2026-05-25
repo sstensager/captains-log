@@ -107,6 +107,19 @@ export interface AdminStats {
   embeddings: number
 }
 
+export interface QueryLogResult {
+  log_id: number
+  raw_text: string
+  created_at: string
+  score: number
+}
+
+export interface QueryResponse {
+  answer: string | null
+  logs: QueryLogResult[]
+  plan: Record<string, unknown>
+}
+
 export type TasksStatusFilter = 'open' | 'done'
 export type TasksActiveFilter =
   | { kind: 'search'; query: string }

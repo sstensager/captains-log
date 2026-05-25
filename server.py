@@ -291,6 +291,41 @@ def search_logs(q: str = ""):
     return [_log_summary(con, r) for r in rows]
 
 
+# ── NLQ endpoint ─────────────────────────────────────────────────────────────
+
+class QueryLogResult(BaseModel):
+    log_id: int
+    raw_text: str
+    created_at: str
+    score: float
+
+
+class QueryResponse(BaseModel):
+    answer: Optional[str]
+    logs: list[QueryLogResult]
+    plan: dict
+
+
+@app.get("/api/query", response_model=QueryResponse)
+def natural_language_query(q: str, today: str = ""):
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="Query required")
+    from openai import OpenAI
+    from nlq import parse_query, retrieve_for_query, synthesize_answer
+    from datetime import date as _date
+    client = OpenAI()
+    con = _get_con()
+    today_str = today or _date.today().isoformat()
+    plan = parse_query(client, q, today_str)
+    logs = retrieve_for_query(con, plan, limit=10)
+    answer = synthesize_answer(client, q, logs)
+    return QueryResponse(
+        answer=answer,
+        logs=[QueryLogResult(**l) for l in logs],
+        plan=plan.model_dump(),
+    )
+
+
 @app.get("/api/logs/{log_id}", response_model=LogDetail)
 def get_log(log_id: int):
     con = _get_con()
