@@ -119,45 +119,7 @@
 
 ---
 
-## ⬅ START HERE NEXT SESSION
-
-**Natural Language Query (NLQ)** — designed and ready to build. See design notes below.
-
-**Entity attribute enrichment (schemaless metadata)** — designed and ready to build. See design notes below.
-
----
-
-## Design Notes (carry into next session)
-
-### Natural Language Query (NLQ)
-
-**Architecture:** Parse → Retrieve → Synthesize. Two gpt-4o-mini calls per query, ~$0.0001.
-
-**Stage 1 — `nlq.py` (new file):**
-- `QueryPlan` Pydantic model: `entity_names: list[str]`, `date_range: {start, end} | None`, `keywords: list[str]`, `tags: list[str]`, `intent: str`
-- `parse_query(question, today) → QueryPlan` — structured LLM output
-- `synthesize_answer(question, logs) → str | None` — 2–3 sentence answer, `max_tokens=150`
-- Rule: `"last time"` → `date_range=null` (sort handles it); `"last month"` → ISO interval
-
-**Stage 2 — `retrieval.py` addition:**
-- `retrieve_for_query(con, plan, limit=10) → list[dict]`
-- Entity pass (score +3.0 + confidence) → FTS pass (score +normalized) → date hard-filter (Log.created_at OR date_ref annotation value in range) → tag hard-filter → sort DESC
-
-**Stage 3 — `server.py`:**
-- `GET /api/query?q=...&synthesize=true` → `QueryResponse { answer, logs, filters }`
-- `QueryResponse` type in `types.ts`; `naturalLanguageQuery()` in `api.ts`
-
-**UI — LeftRail:**
-- "Ask" button (sparkle/✦ icon) appears when query looks like a question (contains `?` or starts with what/who/where/when/which)
-- NLQ is explicit-submit (Enter), not debounced live search
-- Results replace log list: synthesized answer panel at top (collapsible) + source logs below
-- "Clear" restores normal mode
-
-**Key design decisions already made:**
-- Tags/synthesis handles the "Dario's is a restaurant" gap — entity type is `place`, retrieval uses `tags: ["restaurants"]`, synthesis reads context and filters to restaurant visits
-- date_ref annotations (already shipping) power the date filter for notes like "went there last month" written today
-
----
+## Design Notes
 
 ### Entity Attribute Enrichment (schemaless metadata)
 
@@ -189,8 +151,8 @@
 - [ ] Quick-add todo on mobile: when a filter is active, ≤2 taps to add a new todo to a filtered entity/tag
 
 ### Entities
-- [ ] Natural language query — see design notes above (next session priority)
 - [ ] Entity attribute enrichment — schemaless metadata per entity; see design notes above
+- [ ] NLQ: generic category queries (pass entity names as context to parse_query — Bug 3)
 - [ ] Semantic search (LogEmbedding table exists, not wired to UI)
 - [ ] Timeline / journal view — group log list by today / yesterday / this week (UI approach TBD)
 
