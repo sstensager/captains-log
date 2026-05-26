@@ -39,8 +39,8 @@ You are a query parser for a personal log system. Extract a structured query pla
 
 Return JSON with these fields:
 - entity_names: list of proper nouns (people, places, things) that should be looked up in an entity index. Empty list if none.
-- date_range: null OR {{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}}. Only set for explicit time windows ("last month", "in March", "this week"). Do NOT set for "last time" or "most recent" — those are handled by sort order.
-- keywords: list of content keywords for full-text search (skip entity names and stop words).
+- date_range: null OR {{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}}. Only set for explicit time windows ("last month", "in March", "this week", named holidays). Do NOT set for "last time" or "most recent" — those are handled by sort order.
+- keywords: list of content keywords for full-text search. IMPORTANT: always include event/holiday names in keywords even if they also appear in date_range (e.g. "Juneteenth" → keywords=["Juneteenth"], "4th of July" → keywords=["July"], "Christmas" → keywords=["Christmas"]). Skip generic stop words but keep meaningful nouns.
 - tags: list of relevant topic tags from this vocabulary: restaurants, cooking, coffee, bars, wine, groceries, food, camping, hiking, road-trips, hotels, flights, travel, family, friends, kids, dates, social, fitness, medical, sleep, wellness, health, renovation, repairs, garden, chores, errands, home, meetings, projects, decisions, work, expenses, budget, investments, taxes, finance, movies, books, music, tv, sports, games, ideas, research, learning, planning, milestone, reflection, memory, shopping. Empty list if none apply.
 - intent: one short sentence describing what the user wants to know.
 
@@ -88,6 +88,7 @@ def retrieve_for_query(
     con: sqlite3.Connection,
     plan: QueryPlan,
     limit: int = 10,
+    today: str = "",
 ) -> list[dict]:
     """
     Multi-pass retrieval:
@@ -97,7 +98,11 @@ def retrieve_for_query(
       4. Tag soft-boost: +0.5 for logs whose tags overlap plan.tags
     Returns list sorted by score descending.
     """
+    from datetime import date as _date
     from retrieval import _sanitize_fts_query
+
+    if not today:
+        today = _date.today().isoformat()
 
     scores: dict[int, float] = {}
     meta: dict[int, dict] = {}
@@ -117,9 +122,20 @@ def retrieve_for_query(
             scores[log_id] = scores.get(log_id, 0.0) + 3.0 * (confidence or 0.8)
             meta.setdefault(log_id, {"raw_text": raw_text, "created_at": created_at})
 
-    # Pass 2 — FTS keywords
-    if plan.keywords:
-        fts_query = " ".join(_sanitize_fts_query(k) for k in plan.keywords if k.strip())
+    # Pass 2 — FTS keywords (stop words removed to avoid FTS5 AND poisoning)
+    _STOP_WORDS = {
+        'a','an','the','is','are','was','were','be','been','being',
+        'have','has','had','do','does','did','will','would','could',
+        'should','may','might','shall','can','go','get','make',
+        'like','want','need','know','think','see','come','take',
+        'use','find','give','tell','ask','seem','feel','try',
+        'leave','call','keep','let','put','mean','become','show',
+        'we','our','us','i','you','it','this','that','what','which',
+        'who','how','when','where','why',
+    }
+    filtered_keywords = [k for k in plan.keywords if k.lower() not in _STOP_WORDS]
+    if filtered_keywords:
+        fts_query = " ".join(_sanitize_fts_query(k) for k in filtered_keywords if k.strip())
         if fts_query.strip():
             try:
                 rows = con.execute("""
@@ -139,8 +155,8 @@ def retrieve_for_query(
             except Exception:
                 pass
 
-    # Pass 3 — date hard-filter
-    if plan.date_range:
+    # Pass 3 — date hard-filter (skip for future dates — those are planning queries about an event)
+    if plan.date_range and plan.date_range.start <= today:
         start = plan.date_range.start
         end = plan.date_range.end + "T23:59:59"
         keep: set[int] = set()
@@ -157,7 +173,7 @@ def retrieve_for_query(
         scores = {k: v for k, v in scores.items() if k in keep}
         meta   = {k: v for k, v in meta.items()   if k in keep}
 
-    # Pass 4 — tag soft-boost
+    # Pass 4 — tag soft-boost (for already-scored logs)
     if plan.tags and scores:
         for log_id in scores:
             row = con.execute("SELECT tags FROM Log WHERE id = ?", (log_id,)).fetchone()
@@ -165,6 +181,15 @@ def retrieve_for_query(
                 log_tags = json.loads(row[0] or "[]")
                 if any(t in log_tags for t in plan.tags):
                     scores[log_id] += 0.5
+
+    # Pass 5 — tag primary fallback (when no other signal found)
+    if plan.tags and not scores:
+        rows = con.execute("SELECT id, raw_text, created_at, tags FROM Log").fetchall()
+        for log_id, raw_text, created_at, tags_json in rows:
+            log_tags = json.loads(tags_json or "[]")
+            if any(t in log_tags for t in plan.tags):
+                scores[log_id] = 1.0
+                meta[log_id] = {"raw_text": raw_text, "created_at": created_at}
 
     sorted_ids = sorted(scores, key=lambda x: -scores[x])[:limit]
     return [

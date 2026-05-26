@@ -317,7 +317,7 @@ def natural_language_query(q: str, today: str = ""):
     con = _get_con()
     today_str = today or _date.today().isoformat()
     plan = parse_query(client, q, today_str)
-    logs = retrieve_for_query(con, plan, limit=10)
+    logs = retrieve_for_query(con, plan, limit=10, today=today_str)
     answer = synthesize_answer(client, q, logs)
     return QueryResponse(
         answer=answer,

@@ -1,6 +1,6 @@
 # Captain's Log — TODO
 
-*Last updated: 2026-05-22 (session 5)*
+*Last updated: 2026-05-25 (session 7)*
 
 ---
 
@@ -10,6 +10,44 @@
 - "What did we think about the campsites at Kirk Creek?"
 - "What are Beth's kids' names?"
 - "What did we order last time at Osteria Mozza?"
+
+---
+
+## ⬅ START HERE NEXT SESSION
+
+**NLQ is at 26/27. Remaining known weakness (not a hard failure):**
+
+- **Generic category queries** — "Which campsites have we been to?" surfaces Table Mountain but not Windwolves/Lake Arrowhead. Root cause: parser returns `entity_names=[]` for open-ended category questions because it doesn't know what's in the DB. Medium-term fix: pass top N entity names as context to `parse_query`.
+
+**Next features:**
+- Entity attribute enrichment (schemaless metadata) — design already in TODO.md
+- WYSIWYG editor (Lexical)
+- Voice input (Whisper)
+
+---
+
+## Recently Shipped (session 2026-05-25, session 7)
+
+- **NLQ bug fixes — 23/27 → 26/27:**
+  - Skip date hard-filter when `date_range.start > today` — fixes planning queries for future events (Juneteenth, 4th of July)
+  - Strip FTS stop words before building FTS query — fixes "Where should we go for Mexican food?" (was matching "go" as required keyword)
+  - Tag primary fallback (Pass 5) in `retrieve_for_query` — when entity+FTS passes return nothing, fall back to direct tag scan; fixes "What restaurants do we like?" and "Last time we went camping"
+  - Prompt update: instruct parser to keep event/holiday names in `keywords` even when they appear in `date_range` — enables FTS to find Juneteenth/July logs
+
+---
+
+## Recently Shipped (session 2026-05-25, session 6)
+
+- **NLQ (Natural Language Query)** — full parse→retrieve→synthesize pipeline. `nlq.py`: `QueryPlan`, `parse_query` (gpt-4o-mini structured output), `retrieve_for_query` (entity index → FTS → date hard-filter → tag soft-boost), `synthesize_answer` (grounded 2-3 sentence answer). `GET /api/query` endpoint in `server.py`. LeftRail UI: search box doubles as ask input, ↵ fires NLQ, ✦ button, ✕ clears, collapsible indigo answer panel + source log list.
+- **Fix entity highlights in todo lines** — `renderBody` was rendering todo text as plain string; now calls `renderLineHighlights` with correct char offset (same as bullet lines already did).
+- **NLQ test infrastructure** (gitignored, local-only, never ships):
+  - `seed_dev_data.py` — 30 personal logs (Layla, Nora, Hunter, Sonya, Bob, Windwolves, Table Mountain, Dario's, etc.)
+  - `seed_food_logs.py` — 14 restaurant/dish logs across cuisines
+  - `seed_campsite_ratings.py` — 6 survey logs covering 215 campsite ratings across 4 campgrounds (zone-biased grades)
+  - `test_nlq.py` — 27-query battery across 9 categories
+  - `run_test_loop.py` — fully autonomous loop: reset → seed → poll parser → run queries → write `test_results/YYYY-MM-DD_HH-MM-SS.txt`
+  - `TESTING.md` — full documentation of test suite, safety guarantees, how to interpret results
+- **Baseline established:** 23/27 pass. All entity/fact/relationship queries excellent. 3 failures = date filter bug. 1 failure = FTS stop word bug.
 
 ---
 
