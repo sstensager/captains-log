@@ -19,6 +19,8 @@ seed_dev_data.py
 seed_food_logs.py
 seed_campsite_ratings.py
 test_nlq.py
+run_test_loop.py
+test_results/
 TESTING.md
 
 # v1 archive — kept locally, not published
