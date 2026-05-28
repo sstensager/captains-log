@@ -15,20 +15,26 @@
 
 ## ⬅ START HERE NEXT SESSION
 
-**Session 8 shipped:**
-- Dedicated Ask page (NLQ moved out of left rail into full-page UI)
-- Query history — saved queries with question, answer, referenced log IDs
-- Two-search distinction: note search (left rail, unchanged) vs. ask/query (Ask page)
-
 **NLQ known weaknesses:**
 
 - **Generic category queries** — "Which campsites have we been to?" surfaces Table Mountain but not Windwolves/Lake Arrowhead. Root cause: parser returns `entity_names=[]` for open-ended category questions because it doesn't know what's in the DB. Medium-term fix: pass top N entity names as context to `parse_query`.
 - **Location inference hallucination** — "Best margarita in Santa Clarita" finds a matching drink but may assert it's in Santa Clarita even if the source log never mentions the city. Root cause: synthesizer reflects the question's location back without verifying it in the logs. Short fix: prompt synthesizer to hedge when location isn't explicit in sources. Real fix: entity enrichment with `city`/`neighborhood` attributes so retrieval can actually geo-filter.
 
+**Small Ask page follow-up:**
+- History item click shows cached answer but not source log cards (log IDs are stored, just not re-fetched). Could wire up a `/api/logs/batch` fetch or store raw_text+created_at snapshots in QueryHistory.
+
 **Next features:**
 - Entity attribute enrichment (schemaless metadata) — design already in TODO.md
 - WYSIWYG editor (Lexical)
 - Voice input (Whisper)
+
+---
+
+## Recently Shipped (session 2026-05-27, session 8)
+
+- **Ask page** — NLQ moved out of left rail into a dedicated full-page UI. History sidebar (desktop) lists past queries newest-first; click to reload cached answer. Full-width query input, indigo answer panel, source log cards. Clicking a source log navigates to Logs with back-to-Ask return.
+- **Query history** — `QueryHistory` table in `db.py`; auto-saved on every query. `GET /api/query/history` endpoint returns last 50.
+- **Left rail cleaned up** — note search only (`Search notes…`), NLQ artifacts removed.
 
 ---
 
