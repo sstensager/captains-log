@@ -1,6 +1,6 @@
 # Captain's Log — TODO
 
-*Last updated: 2026-05-25 (session 7)*
+*Last updated: 2026-05-27 (session 8)*
 
 ---
 
@@ -15,9 +15,15 @@
 
 ## ⬅ START HERE NEXT SESSION
 
-**NLQ is at 26/27. Remaining known weakness (not a hard failure):**
+**Session 8 shipped:**
+- Dedicated Ask page (NLQ moved out of left rail into full-page UI)
+- Query history — saved queries with question, answer, referenced log IDs
+- Two-search distinction: note search (left rail, unchanged) vs. ask/query (Ask page)
+
+**NLQ known weaknesses:**
 
 - **Generic category queries** — "Which campsites have we been to?" surfaces Table Mountain but not Windwolves/Lake Arrowhead. Root cause: parser returns `entity_names=[]` for open-ended category questions because it doesn't know what's in the DB. Medium-term fix: pass top N entity names as context to `parse_query`.
+- **Location inference hallucination** — "Best margarita in Santa Clarita" finds a matching drink but may assert it's in Santa Clarita even if the source log never mentions the city. Root cause: synthesizer reflects the question's location back without verifying it in the logs. Short fix: prompt synthesizer to hedge when location isn't explicit in sources. Real fix: entity enrichment with `city`/`neighborhood` attributes so retrieval can actually geo-filter.
 
 **Next features:**
 - Entity attribute enrichment (schemaless metadata) — design already in TODO.md

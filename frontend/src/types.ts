@@ -120,6 +120,14 @@ export interface QueryResponse {
   plan: Record<string, unknown>
 }
 
+export interface QueryHistoryItem {
+  id: number
+  question: string
+  answer: string | null
+  log_ids: number[]
+  created_at: string
+}
+
 export type TasksStatusFilter = 'open' | 'done'
 export type TasksActiveFilter =
   | { kind: 'search'; query: string }

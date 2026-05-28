@@ -128,6 +128,14 @@ CREATE TABLE IF NOT EXISTS SuppressedSuggestion (
 );
 
 CREATE INDEX IF NOT EXISTS idx_suppressed_log_id ON SuppressedSuggestion(log_id);
+
+CREATE TABLE IF NOT EXISTS QueryHistory (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    question   TEXT    NOT NULL,
+    answer     TEXT,
+    log_ids    TEXT    NOT NULL DEFAULT '[]',  -- JSON array of log_ids
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -329,6 +337,23 @@ def get_all_entities(con: sqlite3.Connection) -> list[tuple]:
         GROUP BY e.id
         ORDER BY ref_count DESC, e.canonical_name
     """).fetchall()
+
+
+def save_query_history(con: sqlite3.Connection, question: str, answer: str | None, log_ids: list[int]) -> int:
+    import json
+    cur = con.execute(
+        "INSERT INTO QueryHistory (question, answer, log_ids) VALUES (?, ?, ?)",
+        (question, answer, json.dumps(log_ids)),
+    )
+    con.commit()
+    return cur.lastrowid
+
+
+def get_query_history(con: sqlite3.Connection, limit: int = 50) -> list[tuple]:
+    return con.execute(
+        "SELECT id, question, answer, log_ids, created_at FROM QueryHistory ORDER BY created_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
 
 
 def get_entity_relationships(con: sqlite3.Connection, entity_id: int) -> list[tuple]:

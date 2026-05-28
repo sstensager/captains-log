@@ -306,24 +306,53 @@ class QueryResponse(BaseModel):
     plan: dict
 
 
+class QueryHistoryItem(BaseModel):
+    id: int
+    question: str
+    answer: Optional[str]
+    log_ids: list[int]
+    created_at: str
+
+
 @app.get("/api/query", response_model=QueryResponse)
 def natural_language_query(q: str, today: str = ""):
     if not q.strip():
         raise HTTPException(status_code=400, detail="Query required")
+    import json as _json
     from openai import OpenAI
     from nlq import parse_query, retrieve_for_query, synthesize_answer
     from datetime import date as _date
+    from db import save_query_history
     client = OpenAI()
     con = _get_con()
     today_str = today or _date.today().isoformat()
     plan = parse_query(client, q, today_str)
     logs = retrieve_for_query(con, plan, limit=10, today=today_str)
     answer = synthesize_answer(client, q, logs)
+    save_query_history(con, q.strip(), answer, [l["log_id"] for l in logs])
     return QueryResponse(
         answer=answer,
         logs=[QueryLogResult(**l) for l in logs],
         plan=plan.model_dump(),
     )
+
+
+@app.get("/api/query/history", response_model=list[QueryHistoryItem])
+def list_query_history():
+    import json as _json
+    from db import get_query_history
+    con = _get_con()
+    rows = get_query_history(con, limit=50)
+    return [
+        QueryHistoryItem(
+            id=r[0],
+            question=r[1],
+            answer=r[2],
+            log_ids=_json.loads(r[3]),
+            created_at=r[4],
+        )
+        for r in rows
+    ]
 
 
 @app.get("/api/logs/{log_id}", response_model=LogDetail)

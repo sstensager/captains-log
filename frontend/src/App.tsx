@@ -3,10 +3,11 @@ import LeftRail from './components/LeftRail'
 import CenterPane from './components/CenterPane'
 import EntitiesPage from './components/EntitiesPage'
 import TasksPage from './components/TasksPage'
+import AskPage from './components/AskPage'
 import type { LogDetail, LogSummary, TasksActiveFilter, TasksStatusFilter } from './types'
 import { fetchLogs } from './api'
 
-type Page = 'logs' | 'entities' | 'tasks'
+type Page = 'logs' | 'entities' | 'tasks' | 'ask'
 type MobileView = 'list' | 'detail'
 
 export default function App() {
@@ -113,6 +114,15 @@ export default function App() {
     setMobileView('detail')
   }
 
+  const handleSelectLogFromAsk = (id: number) => {
+    setPage('logs')
+    setSelectedLogId(id)
+    setEntityToNavigate(null)
+    setReturnLogId(null)
+    setReturnPage('ask')
+    setMobileView('detail')
+  }
+
   const handleEditLogFromTasks = (id: number) => {
     setPage('logs')
     setSelectedLogId(id)
@@ -139,6 +149,7 @@ export default function App() {
     { key: 'logs', label: 'Logs' },
     { key: 'entities', label: 'Nodes' },
     { key: 'tasks', label: 'Todos' },
+    { key: 'ask', label: 'Ask' },
   ]
 
   return (
@@ -208,7 +219,7 @@ export default function App() {
             initialEntity={entityToNavigate ?? undefined}
             onBack={returnLogId !== null ? handleBackFromEntity : undefined}
           />
-        ) : (
+        ) : page === 'tasks' ? (
           <TasksPage
             onSelectLog={handleSelectLogFromTasks}
             onEditLog={handleEditLogFromTasks}
@@ -216,6 +227,8 @@ export default function App() {
             initialStatusFilter={tasksStatusFilter}
             onSnapshot={(f, s) => { setTasksFilter(f); setTasksStatusFilter(s) }}
           />
+        ) : (
+          <AskPage onSelectLog={handleSelectLogFromAsk} />
         )}
       </div>
 
