@@ -119,7 +119,7 @@ function EntityMark({
       {/* Chevron trigger — always visible on touch, hover-only on desktop */}
       <button
         onClick={e => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
-        className={`absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-gray-400 text-white text-[10px] leading-none items-center justify-center hover:bg-gray-600 transition-colors z-10 ${isTouch ? 'flex' : 'hidden group-hover/mark:flex'}`}
+        className="absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-gray-400 text-white text-[10px] leading-none items-center justify-center hover:bg-gray-600 transition-colors z-10 hidden group-hover/mark:flex"
         title="Actions"
       >
         ▾

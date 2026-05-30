@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import re
 import sqlite3
 
 from dotenv import load_dotenv
@@ -120,7 +121,11 @@ def annotate_log(
     if context_lines:
         messages.append({"role": "system", "content": "\n\n".join(context_lines)})
 
-    messages.append({"role": "user", "content": raw_text})
+    # Strip soft-link markers so the LLM sees clean text. Curly braces in the
+    # input confuse gpt-4o-mini's structured output parsing, causing it to return
+    # truncated or brace-prefixed canonical names (e.g. "{Da" instead of "Dad").
+    llm_text = re.sub(r'\{([^}]+)\}', r'\1', raw_text)
+    messages.append({"role": "user", "content": llm_text})
 
     response = client.beta.chat.completions.parse(
         model=PARSER_MODEL,
@@ -129,6 +134,18 @@ def annotate_log(
     )
 
     result = response.choices[0].message.parsed
+
+    # Filter out any mentions the LLM returned despite the confirmed_names instruction.
+    # Belt-and-suspenders: the prompt tells the LLM to skip them, but gpt-4o-mini
+    # sometimes ignores it, and stripped text might reveal the entity again.
+    if confirmed_names:
+        confirmed_lower = {n.lower() for n in confirmed_names}
+        result.mentions = [
+            m for m in result.mentions
+            if m.canonical_name_guess.strip('{}[] ').lower() not in confirmed_lower
+            and m.text.strip('{}[] ').lower() not in confirmed_lower
+        ]
+
     _resolve_spans(raw_text, result)
     insert_annotations(con, log_id, result, provenance=f"{PARSER_MODEL}/{PARSER_VERSION}")
     _save_tags(con, log_id, result.tags)
