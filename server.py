@@ -410,6 +410,25 @@ def update_log(log_id: int, body: LogCreate, background_tasks: BackgroundTasks):
     )
 
 
+@app.post("/api/logs/{log_id}/reparse", response_model=LogDetail)
+def reparse_log(log_id: int, background_tasks: BackgroundTasks):
+    """Strip all soft {Name} markers from raw_text and re-run the full parse pipeline."""
+    con = _get_con()
+    row = con.execute("SELECT raw_text FROM Log WHERE id = ?", (log_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Log not found")
+
+    # Strip {Name} markers; keep [[Name]] user-explicit hard links
+    clean = re.sub(r'\{([^}]+)\}', r'\1', row[0])
+
+    con.execute("UPDATE Log SET raw_text = ?, updated_at = datetime('now') WHERE id = ?", (clean, log_id))
+    con.execute("UPDATE Log_fts SET raw_text = ? WHERE rowid = ?", (clean, log_id))
+    con.commit()
+
+    background_tasks.add_task(_bg_reparse, log_id, clean)
+    return _get_log_detail(log_id)
+
+
 @app.patch("/api/logs/{log_id}/tags", response_model=LogDetail)
 def patch_log_tags(log_id: int, body: LogTagsPatch):
     con = _get_con()

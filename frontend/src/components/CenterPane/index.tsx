@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import EmptyState from './EmptyState'
-import { fetchLog, createLog, fetchTasks, patchTask, updateLog, patchAnnotation, promoteAnnotation, relinkAnnotation, fetchEntities, patchLogTags } from '../../api'
+import { fetchLog, createLog, fetchTasks, patchTask, updateLog, patchAnnotation, promoteAnnotation, relinkAnnotation, fetchEntities, patchLogTags, reparseLog } from '../../api'
 import type { Annotation, EntitySummary, LogDetail, TaskOut } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate, shortTime } from '../../utils/time'
@@ -1016,12 +1016,21 @@ function EditView({
 }) {
   const [text, setText] = useState(initialText)
   const [saving, setSaving] = useState(false)
+  const [reparsing, setReparsing] = useState(false)
   const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set())
 
   const handleSave = () => {
     if (!text.trim() || saving) return
     setSaving(true)
     onSave(text.trim())
+  }
+
+  const handleReparse = () => {
+    if (!logId || reparsing) return
+    setReparsing(true)
+    reparseLog(logId).then(updated => {
+      onSave(updated.raw_text)
+    }).catch(() => setReparsing(false))
   }
 
   const handleDismiss = (id: number) => {
@@ -1052,7 +1061,17 @@ function EditView({
           )}
           <span className="text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {logId && (
+            <button
+              onClick={handleReparse}
+              disabled={reparsing}
+              className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-40 transition-colors"
+              title="Strip soft markers and re-run parser"
+            >
+              {reparsing ? 'Re-parsing…' : 'Re-parse'}
+            </button>
+          )}
           <button onClick={onCancel} className="text-sm text-gray-400 hover:text-gray-700 transition-colors">Cancel</button>
           <button
             onClick={handleSave}
@@ -1080,6 +1099,16 @@ function EditView({
           onCancel={onCancel}
           trailingToolbar={
             <>
+              {logId && (
+                <button
+                  onClick={handleReparse}
+                  disabled={reparsing}
+                  className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-40 transition-colors px-1"
+                  title="Strip soft markers and re-run parser"
+                >
+                  {reparsing ? '…' : 'Re-parse'}
+                </button>
+              )}
               <button onClick={onCancel} className="text-sm text-gray-400 hover:text-gray-700 transition-colors">Cancel</button>
               <button
                 onClick={handleSave}
