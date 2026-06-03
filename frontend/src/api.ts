@@ -1,4 +1,4 @@
-import type { AdminStats, EntityDetail, EntitySummary, LogDetail, LogSummary, QueryHistoryItem, QueryResponse, TaskOut } from './types'
+import type { AdminStats, EntityDetail, EntitySummary, GeneratedListOut, LogDetail, LogSummary, QueryHistoryItem, QueryResponse, TaskOut } from './types'
 
 const BASE = '/api'
 
@@ -127,3 +127,18 @@ export const naturalLanguageQuery = (q: string): Promise<QueryResponse> => {
 
 export const fetchQueryHistory = (): Promise<QueryHistoryItem[]> =>
   get('/query/history')
+
+// ── Generated Lists ───────────────────────────────────────────────────────────
+
+export const createGeneratedList = (
+  filter: { kind: 'entity' | 'tag'; value: string }
+): Promise<GeneratedListOut> =>
+  post('/generated-lists', { filter })
+
+export const fetchGeneratedList = (id: number): Promise<GeneratedListOut> =>
+  get(`/generated-lists/${id}`)
+
+export const deleteGeneratedList = async (id: number): Promise<void> => {
+  const res = await fetch(`/api/generated-lists/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`DELETE /generated-lists/${id} → ${res.status}`)
+}

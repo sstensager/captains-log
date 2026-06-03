@@ -128,6 +128,21 @@ export interface QueryHistoryItem {
   created_at: string
 }
 
+export interface GeneratedListSection {
+  label: string
+  description: string
+  tasks: TaskOut[]
+}
+
+export interface GeneratedListOut {
+  id: number
+  title: string
+  description: string | null
+  filter_json: string
+  sections: GeneratedListSection[]
+  created_at: string
+}
+
 export type TasksStatusFilter = 'open' | 'done'
 export type TasksActiveFilter =
   | { kind: 'search'; query: string }

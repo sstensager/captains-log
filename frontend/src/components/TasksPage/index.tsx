@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchAllTasks, patchTask } from '../../api'
-import type { TaskEntityRef, TaskOut, TasksActiveFilter, TasksStatusFilter } from '../../types'
+import { createGeneratedList, fetchAllTasks, patchTask } from '../../api'
+import type { GeneratedListOut, TaskEntityRef, TaskOut, TasksActiveFilter, TasksStatusFilter } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate } from '../../utils/time'
 import AnnotatedText from '../AnnotatedText'
@@ -87,6 +87,106 @@ function buildSnapshot(
   })
 }
 
+function taskAge(isoDate: string | null): string {
+  if (!isoDate) return ''
+  const days = Math.floor((Date.now() - new Date(isoDate).getTime()) / 86_400_000)
+  if (days < 1) return 'today'
+  if (days === 1) return '1 day ago'
+  if (days < 14) return `${days} days ago`
+  if (days < 60) return `${Math.floor(days / 7)} wk ago`
+  return `${Math.floor(days / 30)} mo ago`
+}
+
+function GeneratedListView({
+  list,
+  tasks,
+  onToggle,
+  onRegenerate,
+  onClose,
+  regenerating,
+}: {
+  list: GeneratedListOut
+  tasks: TaskOut[]
+  onToggle: (task: TaskOut) => void
+  onRegenerate: () => void
+  onClose: () => void
+  regenerating: boolean
+}) {
+  const taskById = (id: number) => tasks.find(t => t.id === id)
+
+  return (
+    <div className="w-full max-w-2xl space-y-4">
+      {/* List header */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-gray-800">{list.title}</h2>
+          {list.description && (
+            <p className="text-xs text-gray-400 mt-0.5">{list.description}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={onRegenerate}
+            disabled={regenerating}
+            className="text-xs text-gray-400 hover:text-gray-700 disabled:opacity-40 transition-colors"
+          >
+            {regenerating ? 'Regenerating…' : 'Regenerate'}
+          </button>
+          <button
+            onClick={onClose}
+            className="text-xs text-gray-400 hover:text-gray-700 transition-colors"
+          >
+            ✕ Close
+          </button>
+        </div>
+      </div>
+
+      {/* Sections */}
+      {list.sections.map((section, si) => (
+        <div key={si} className="rounded-xl border bg-white shadow-sm overflow-hidden">
+          {/* Section header */}
+          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+            <div className="text-sm font-medium text-gray-700">{section.label}</div>
+            {section.description && (
+              <div className="text-xs text-gray-400 mt-0.5 italic">{section.description}</div>
+            )}
+          </div>
+          {/* Tasks */}
+          <div className="divide-y divide-gray-50">
+            {section.tasks.map(sectionTask => {
+              const live = taskById(sectionTask.id) ?? sectionTask
+              const done = live.status === 'done'
+              return (
+                <div
+                  key={live.id}
+                  onClick={() => onToggle(live)}
+                  className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer active:bg-gray-50 transition-opacity ${done ? 'opacity-50' : ''}`}
+                >
+                  <div
+                    className={`w-4 h-4 shrink-0 rounded border text-xs flex items-center justify-center transition-colors ${
+                      done ? 'bg-gray-900 border-gray-900 text-white' : 'border-gray-400'
+                    }`}
+                  >
+                    {done && '✓'}
+                  </div>
+                  <span className={`text-sm flex-1 min-w-0 break-words ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                    {live.title}
+                  </span>
+                  {live.log_created_at && (
+                    <span className="text-[10px] text-gray-300 shrink-0 tabular-nums">
+                      {taskAge(live.log_created_at)}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function EntityChip({ entity, onClick }: { entity: TaskEntityRef; onClick?: () => void }) {
   const c = colorFor(entity.type)
   return (
@@ -116,6 +216,8 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
     initialFilter != null ? 'flat' : 'grouped'
   )
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+  const [generatedList, setGeneratedList] = useState<GeneratedListOut | null>(null)
+  const [organizing, setOrganizing] = useState(false)
 
   // Keep a ref so we can rebuild the snapshot without adding tasks as a dep
   const tasksRef = useRef<TaskOut[]>([])
@@ -170,6 +272,7 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
 
   const handleSearch = (q: string) => {
     setSearchInput(q)
+    setGeneratedList(null)
     if (q.trim()) {
       setFilter({ kind: 'search', query: q })
       setViewMode('flat')
@@ -181,8 +284,35 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
 
   const setPill = (kind: 'tag' | 'entity', value: string) => {
     const already = filter?.kind === kind && (filter as any).value === value
+    setGeneratedList(null)
     if (already) { setFilter(null); setSearchInput(''); setViewMode('grouped') }
     else { setFilter({ kind, value }); setSearchInput(''); setViewMode('flat') }
+  }
+
+  const handleOrganize = async () => {
+    if (!filter || filter.kind === 'search' || organizing) return
+    setOrganizing(true)
+    try {
+      const list = await createGeneratedList({ kind: filter.kind, value: filter.value })
+      setGeneratedList(list)
+    } catch (e) {
+      console.error('Organize failed', e)
+    } finally {
+      setOrganizing(false)
+    }
+  }
+
+  const handleRegenerate = async () => {
+    if (!filter || filter.kind === 'search') return
+    setOrganizing(true)
+    try {
+      const list = await createGeneratedList({ kind: filter.kind, value: filter.value })
+      setGeneratedList(list)
+    } catch (e) {
+      console.error('Regenerate failed', e)
+    } finally {
+      setOrganizing(false)
+    }
   }
 
   const navigateToLog = (logId: number, editMode: boolean) => {
@@ -396,8 +526,8 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
 
       {/* Task groups */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6">
-        {/* View mode toggle — only shown when a filter is active */}
-        {filter && (
+        {/* View mode toggle + Organize button — only shown when a filter is active */}
+        {filter && !generatedList && (
           <div className="flex items-center gap-2 mb-4 max-w-2xl">
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
               {(['flat', 'grouped'] as const).map(mode => (
@@ -412,10 +542,38 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
                 </button>
               ))}
             </div>
+            {filter.kind !== 'search' && (
+              <button
+                onClick={handleOrganize}
+                disabled={organizing}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 disabled:opacity-50 transition-colors"
+              >
+                {organizing ? (
+                  <>
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                    Organizing…
+                  </>
+                ) : (
+                  <>✦ Organize</>
+                )}
+              </button>
+            )}
           </div>
         )}
 
-        {loading ? (
+        {generatedList ? (
+          <GeneratedListView
+            list={generatedList}
+            tasks={tasks}
+            onToggle={toggle}
+            onRegenerate={handleRegenerate}
+            onClose={() => setGeneratedList(null)}
+            regenerating={organizing}
+          />
+        ) : loading ? (
           <div className="text-sm text-gray-400">Loading…</div>
         ) : snapshotGroups.length === 0 ? (
           <div className="text-sm text-gray-400 mt-8 text-center">

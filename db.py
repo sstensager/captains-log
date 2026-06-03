@@ -136,6 +136,15 @@ CREATE TABLE IF NOT EXISTS QueryHistory (
     log_ids    TEXT    NOT NULL DEFAULT '[]',  -- JSON array of log_ids
     created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS GeneratedList (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    title         TEXT    NOT NULL,
+    description   TEXT,
+    filter_json   TEXT    NOT NULL,   -- {"kind": "entity"|"tag", "value": "..."}
+    sections_json TEXT    NOT NULL,   -- JSON array of {label, description, task_ids}
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -152,6 +161,14 @@ def _run_migrations(con: sqlite3.Connection) -> None:
         "ALTER TABLE Task ADD COLUMN section TEXT",
         "ALTER TABLE Log ADD COLUMN updated_at TEXT",
         "ALTER TABLE Log ADD COLUMN user_tags TEXT NOT NULL DEFAULT '[]'",
+        """CREATE TABLE IF NOT EXISTS GeneratedList (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            title         TEXT    NOT NULL,
+            description   TEXT,
+            filter_json   TEXT    NOT NULL,
+            sections_json TEXT    NOT NULL,
+            created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+        )""",
     ]
     for sql in migrations:
         try:

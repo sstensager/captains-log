@@ -154,6 +154,25 @@ class TaskPatch(BaseModel):
     status: str
 
 
+class GeneratedListSectionOut(BaseModel):
+    label: str
+    description: str
+    tasks: list[TaskOut]
+
+
+class GeneratedListOut(BaseModel):
+    id: int
+    title: str
+    description: Optional[str]
+    filter_json: str
+    sections: list[GeneratedListSectionOut]
+    created_at: str
+
+
+class GeneratedListCreate(BaseModel):
+    filter: dict  # {"kind": "entity"|"tag", "value": "..."}
+
+
 class EntityPatch(BaseModel):
     canonical_name: Optional[str] = None
     user_notes: Optional[str] = None
@@ -353,6 +372,173 @@ def list_query_history():
         )
         for r in rows
     ]
+
+
+@app.post("/api/generated-lists", response_model=GeneratedListOut, status_code=201)
+def create_generated_list(body: GeneratedListCreate):
+    from openai import OpenAI
+    from organize import organize_tasks, _task_age, OrgResult, OrgSection
+    import json as _json
+
+    kind = body.filter.get("kind")
+    value = body.filter.get("value", "")
+    if kind not in ("entity", "tag") or not value:
+        raise HTTPException(status_code=400, detail="filter must have kind=entity|tag and value")
+
+    con = _get_con()
+
+    # Fetch all open tasks, then filter server-side to match the requested filter
+    all_rows = con.execute("""
+        SELECT t.id, t.title, t.status, t.source_log_id, l.tags, l.raw_text,
+               t.indent, t.section, l.created_at
+        FROM Task t
+        LEFT JOIN Log l ON l.id = t.source_log_id
+        WHERE t.status != 'done'
+        ORDER BY l.created_at ASC, t.id
+    """).fetchall()
+
+    # Build entity map for log_ids
+    log_ids_all = list({r[3] for r in all_rows if r[3]})
+    entity_map: dict = {}
+    if log_ids_all:
+        ph = ",".join("?" * len(log_ids_all))
+        for elog_id, ename, etype in con.execute(f"""
+            SELECT DISTINCT er.log_id, e.canonical_name, e.entity_type
+            FROM EntityReference er
+            JOIN Entity e ON e.id = er.entity_id AND e.merged_into_id IS NULL
+            WHERE er.log_id IN ({ph})
+        """, log_ids_all).fetchall():
+            entity_map.setdefault(elog_id, []).append(TaskEntityRef(name=ename, type=etype.lower()))
+
+    def _matches(row) -> bool:
+        task_id, title, status, source_log_id, tags_json, raw_text, indent, section, log_created_at = row
+        tags = _json.loads(tags_json or "[]")
+        entities = entity_map.get(source_log_id, [])
+        if kind == "tag":
+            return value in tags
+        if kind == "entity":
+            return any(e.name == value for e in entities)
+        return False
+
+    matched = [r for r in all_rows if _matches(r)]
+    if not matched:
+        raise HTTPException(status_code=404, detail="No open tasks match that filter")
+
+    # Build task dicts for the LLM
+    task_dicts = []
+    task_rows_by_id: dict[int, TaskOut] = {}
+    for task_id, title, status, source_log_id, tags_json, raw_text, indent, section, log_created_at in matched:
+        tags = _json.loads(tags_json or "[]")
+        entities = entity_map.get(source_log_id, [])
+        preview = (raw_text or "").split("\n")[0][:80] or None
+        age = _task_age(log_created_at) if log_created_at else ""
+        task_dicts.append({"id": task_id, "title": title, "age": age, "preview": preview})
+        task_rows_by_id[task_id] = TaskOut(
+            id=task_id, title=title, status=status,
+            source_log_id=source_log_id, tags=tags, entities=entities,
+            log_preview=preview, log_created_at=log_created_at,
+            indent=indent, section=section,
+        )
+
+    filter_label = value if kind == "entity" else f"tag: {value}"
+    client = OpenAI()
+    result: OrgResult = organize_tasks(client, filter_label, task_dicts)
+
+    # Ensure every matched task appears (guard against LLM dropping items)
+    assigned_ids = {tid for sec in result.sections for tid in sec.task_ids}
+    missing = [t for t in task_dicts if t["id"] not in assigned_ids]
+    if missing:
+        result.sections.append(
+            OrgSection(
+                label="Other",
+                description="Remaining items not categorized above.",
+                task_ids=[t["id"] for t in missing],
+            )
+        )
+
+    sections_data = [
+        {"label": s.label, "description": s.description, "task_ids": s.task_ids}
+        for s in result.sections
+    ]
+
+    cur = con.execute(
+        "INSERT INTO GeneratedList (title, description, filter_json, sections_json) VALUES (?, ?, ?, ?)",
+        (result.title, result.description, _json.dumps(body.filter), _json.dumps(sections_data)),
+    )
+    con.commit()
+    list_id = cur.lastrowid
+    created_at = con.execute("SELECT created_at FROM GeneratedList WHERE id = ?", (list_id,)).fetchone()[0]
+
+    sections_out = [
+        GeneratedListSectionOut(
+            label=s["label"],
+            description=s["description"],
+            tasks=[task_rows_by_id[tid] for tid in s["task_ids"] if tid in task_rows_by_id],
+        )
+        for s in sections_data
+    ]
+
+    return GeneratedListOut(
+        id=list_id,
+        title=result.title,
+        description=result.description,
+        filter_json=_json.dumps(body.filter),
+        sections=sections_out,
+        created_at=created_at,
+    )
+
+
+@app.get("/api/generated-lists/{list_id}", response_model=GeneratedListOut)
+def get_generated_list(list_id: int):
+    import json as _json
+    con = _get_con()
+    row = con.execute(
+        "SELECT id, title, description, filter_json, sections_json, created_at FROM GeneratedList WHERE id = ?",
+        (list_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="List not found")
+
+    gl_id, title, description, filter_json, sections_json, created_at = row
+    sections_data = _json.loads(sections_json)
+
+    all_task_ids = [tid for s in sections_data for tid in s["task_ids"]]
+    task_map: dict[int, TaskOut] = {}
+    if all_task_ids:
+        ph = ",".join("?" * len(all_task_ids))
+        for t_id, t_title, t_status, t_src, t_tags, t_raw, t_indent, t_section, t_created in con.execute(f"""
+            SELECT t.id, t.title, t.status, t.source_log_id, l.tags, l.raw_text,
+                   t.indent, t.section, l.created_at
+            FROM Task t LEFT JOIN Log l ON l.id = t.source_log_id
+            WHERE t.id IN ({ph})
+        """, all_task_ids).fetchall():
+            preview = (t_raw or "").split("\n")[0][:80] or None
+            task_map[t_id] = TaskOut(
+                id=t_id, title=t_title, status=t_status,
+                source_log_id=t_src, tags=_json.loads(t_tags or "[]"),
+                log_preview=preview, log_created_at=t_created,
+                indent=t_indent, section=t_section,
+            )
+
+    sections_out = [
+        GeneratedListSectionOut(
+            label=s["label"],
+            description=s["description"],
+            tasks=[task_map[tid] for tid in s["task_ids"] if tid in task_map],
+        )
+        for s in sections_data
+    ]
+    return GeneratedListOut(
+        id=gl_id, title=title, description=description,
+        filter_json=filter_json, sections=sections_out, created_at=created_at,
+    )
+
+
+@app.delete("/api/generated-lists/{list_id}", status_code=204)
+def delete_generated_list(list_id: int):
+    con = _get_con()
+    con.execute("DELETE FROM GeneratedList WHERE id = ?", (list_id,))
+    con.commit()
 
 
 @app.get("/api/logs/{log_id}", response_model=LogDetail)
