@@ -1,6 +1,6 @@
 # Captain's Log — TODO
 
-*Last updated: 2026-05-27 (session 8)*
+*Last updated: 2026-06-06 (session 9)*
 
 ---
 
@@ -15,18 +15,30 @@
 
 ## ⬅ START HERE NEXT SESSION
 
-**NLQ known weaknesses:**
+**Generated lists — known gap:**
+- The "✦ Organize" button only appears on entity/tag filters, not search filters. Could extend to search if useful.
+- No way to see previously generated lists (ephemeral by design for now). Shareability/linking is a future feature — lists are stored in `GeneratedList` table with a unique ID, ready for a `/shared/lists/:id` route.
 
+**NLQ known weaknesses:**
 - **Generic category queries** — "Which campsites have we been to?" surfaces Table Mountain but not Windwolves/Lake Arrowhead. Root cause: parser returns `entity_names=[]` for open-ended category questions because it doesn't know what's in the DB. Medium-term fix: pass top N entity names as context to `parse_query`.
-- **Location inference hallucination** — "Best margarita in Santa Clarita" finds a matching drink but may assert it's in Santa Clarita even if the source log never mentions the city. Root cause: synthesizer reflects the question's location back without verifying it in the logs. Short fix: prompt synthesizer to hedge when location isn't explicit in sources. Real fix: entity enrichment with `city`/`neighborhood` attributes so retrieval can actually geo-filter.
+- **Location inference hallucination** — "Best margarita in Santa Clarita" finds a matching drink but may assert it's in Santa Clarita even if the source log never mentions the city. Short fix: prompt synthesizer to hedge when location isn't explicit in sources. Real fix: entity enrichment with `city`/`neighborhood` attributes.
 
 **Small Ask page follow-up:**
-- History item click shows cached answer but not source log cards (log IDs are stored, just not re-fetched). Could wire up a `/api/logs/batch` fetch or store raw_text+created_at snapshots in QueryHistory.
+- History item click shows cached answer but not source log cards (log IDs are stored, just not re-fetched).
 
 **Next features:**
 - Entity attribute enrichment (schemaless metadata) — design already in TODO.md
 - WYSIWYG editor (Lexical)
 - Voice input (Whisper)
+
+---
+
+## Recently Shipped (session 2026-06-06, session 9)
+
+- **Generated todo lists** — "✦ Organize" button on Todos page when an entity or tag filter is active. Calls gpt-4o-mini to consolidate all open matching tasks into named sections (label + description each). Tasks reference live `Task` rows — checking one off updates everywhere. Regenerate re-runs; Close returns to normal view. `GeneratedList` table stores results for future shareability. `organize.py` handles the LLM call.
+- **Re-parse button** — Edit mode now has a "Re-parse" button (desktop header + mobile toolbar). Strips all `{Name}` soft-link markers from raw text and queues a clean background parse. Repairs notes corrupted by the marker truncation bug.
+- **Parser re-parse bug fix** — `{Name}` markers in raw text were confusing gpt-4o-mini's structured output parser, causing truncated/brace-prefixed entity names like `{Da` instead of `Dad`. Fix: strip `{...}` markers from text before LLM call in `annotate_log`. Added confirmed_names post-filter as belt-and-suspenders.
+- **Entity highlight chevrons removed on mobile** — The gray `▾` dot buttons on entity highlights were always visible on touch, cluttering the note view. Now hidden on touch (desktop hover-only); tapping the highlighted text still opens the action menu.
 
 ---
 
