@@ -24,6 +24,7 @@ class DateRange(BaseModel):
 
 class QueryPlan(BaseModel):
     entity_names: list[str]
+    location: Optional[str]
     date_range: Optional[DateRange]
     keywords: list[str]
     tags: list[str]
@@ -39,6 +40,7 @@ You are a query parser for a personal log system. Extract a structured query pla
 
 Return JSON with these fields:
 - entity_names: list of proper nouns (people, places, things) that should be looked up in an entity index. Empty list if none.
+- location: null OR a city/neighborhood/region string extracted from the question (e.g. "Santa Clarita", "Oaxaca", "downtown"). Only set when the user explicitly asks about a specific location. Do NOT set for generic questions.
 - date_range: null OR {{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}}. Only set for explicit time windows ("last month", "in March", "this week", named holidays). Do NOT set for "last time" or "most recent" — those are handled by sort order.
 - keywords: list of content keywords for full-text search. IMPORTANT: always include event/holiday names in keywords even if they also appear in date_range (e.g. "Juneteenth" → keywords=["Juneteenth"], "4th of July" → keywords=["July"], "Christmas" → keywords=["Christmas"]). Skip generic stop words but keep meaningful nouns.
 - tags: list of relevant topic tags from this vocabulary: restaurants, cooking, coffee, bars, wine, groceries, food, camping, hiking, road-trips, hotels, flights, travel, family, friends, kids, dates, social, fitness, medical, sleep, wellness, health, renovation, repairs, garden, chores, errands, home, meetings, projects, decisions, work, expenses, budget, investments, taxes, finance, movies, books, music, tv, sports, games, ideas, research, learning, planning, milestone, reflection, memory, shopping. Empty list if none apply.
@@ -61,6 +63,7 @@ def parse_query(client: OpenAI, question: str, today: str) -> QueryPlan:
     data = json.loads(resp.choices[0].message.content)
     return QueryPlan(
         entity_names=data.get("entity_names", []),
+        location=data.get("location") or None,
         date_range=DateRange(**data["date_range"]) if data.get("date_range") else None,
         keywords=data.get("keywords", []),
         tags=data.get("tags", []),
@@ -121,6 +124,26 @@ def retrieve_for_query(
         for log_id, raw_text, created_at, confidence in rows:
             scores[log_id] = scores.get(log_id, 0.0) + 3.0 * (confidence or 0.8)
             meta.setdefault(log_id, {"raw_text": raw_text, "created_at": created_at})
+
+    # Pass 1b — location filter: when location is set, downweight/drop entity hits
+    # whose enriched city attribute clearly doesn't match
+    if plan.location and scores:
+        location_lower = plan.location.lower()
+        for log_id in list(scores.keys()):
+            # Find entities referenced in this log that have auto:places city attributes
+            entity_rows = con.execute("""
+                SELECT a.value FROM EntityReference er
+                JOIN Attribute a ON a.entity_id = er.entity_id
+                WHERE er.log_id = ? AND a.key = 'city' AND a.provenance = 'auto:places'
+            """, (log_id,)).fetchall()
+            if not entity_rows:
+                # No enrichment data — keep log but apply a small penalty
+                scores[log_id] *= 0.8
+            else:
+                cities = [r[0].lower() for r in entity_rows if r[0]]
+                if not any(location_lower in c or c in location_lower for c in cities):
+                    del scores[log_id]
+                    meta.pop(log_id, None)
 
     # Pass 2 — FTS keywords (stop words removed to avoid FTS5 AND poisoning)
     _STOP_WORDS = {

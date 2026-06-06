@@ -121,6 +121,8 @@ class LogDetail(BaseModel):
 
 class LogCreate(BaseModel):
     raw_text: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class AnnotationPatch(BaseModel):
@@ -194,6 +196,7 @@ class AttributeOut(BaseModel):
     value: str
     source_log_id: Optional[int] = None
     source_ts: Optional[str] = None
+    provenance: Optional[str] = None
 
 
 class MentionOut(BaseModel):
@@ -217,6 +220,7 @@ class EntityDetail(BaseModel):
     type: str
     status: str
     user_notes: Optional[str] = None
+    places_enriched_at: Optional[str] = None
     attributes: list[AttributeOut]
     mentions: list[MentionOut]
     relationships: list[RelationshipOut]
@@ -630,12 +634,12 @@ def patch_log_tags(log_id: int, body: LogTagsPatch):
 def create_log(body: LogCreate, background_tasks: BackgroundTasks):
     con = _get_con()
     text = body.raw_text.strip()
-    log_id = insert_log(con, text)
+    log_id = insert_log(con, text, latitude=body.latitude, longitude=body.longitude)
     created_at = con.execute(
         "SELECT created_at FROM Log WHERE id = ?", (log_id,)
     ).fetchone()[0]
 
-    background_tasks.add_task(_bg_parse_and_promote, log_id, text)
+    background_tasks.add_task(_bg_parse_and_promote, log_id, text, body.latitude, body.longitude)
 
     return LogDetail(
         id=log_id,
@@ -662,9 +666,15 @@ def _fetch_known_entities(con) -> list[tuple[str, str]]:
     return [(r[0], r[1]) for r in rows]
 
 
-def _bg_parse_and_promote(log_id: int, raw_text: str) -> None:
+def _bg_parse_and_promote(
+    log_id: int,
+    raw_text: str,
+    lat: float | None = None,
+    lng: float | None = None,
+) -> None:
     """Annotate a log and promote entity mentions. Runs in a background thread."""
     from parser import annotate_log
+    from places import enrich_place
     con = init_db()
     try:
         known = _fetch_known_entities(con)
@@ -683,6 +693,21 @@ def _bg_parse_and_promote(log_id: int, raw_text: str) -> None:
             con.commit()
             extract_links(log_id, new_text, con)
         promote_all_mentions(con, min_confidence=0.7)
+
+        # Enrich any newly-created Place entities from this log that haven't been enriched yet
+        place_rows = con.execute("""
+            SELECT e.id, e.canonical_name
+            FROM Entity e
+            JOIN EntityReference er ON er.entity_id = e.id
+            WHERE er.log_id = ? AND e.entity_type = 'Place' AND e.places_enriched_at IS NULL
+              AND e.merged_into_id IS NULL
+        """, (log_id,)).fetchall()
+        for entity_id, name in place_rows:
+            try:
+                enrich_place(entity_id, name, lat, lng, con)
+            except Exception as enrich_err:
+                print(f"[places enrich error] entity {entity_id} ({name}): {enrich_err}")
+
     except Exception as e:
         print(f"[bg_parse error] log {log_id}: {e}")
 
@@ -1057,7 +1082,7 @@ def list_entities():
 def get_entity(entity_name: str):
     con = _get_con()
     row = con.execute(
-        "SELECT id, canonical_name, entity_type, status, user_notes "
+        "SELECT id, canonical_name, entity_type, status, user_notes, places_enriched_at "
         "FROM Entity WHERE LOWER(canonical_name) = LOWER(?) "
         "AND merged_into_id IS NULL LIMIT 1",
         (entity_name,),
@@ -1065,7 +1090,7 @@ def get_entity(entity_name: str):
     if not row:
         raise HTTPException(status_code=404, detail="Entity not found")
 
-    entity_id, name, entity_type, status, user_notes = row
+    entity_id, name, entity_type, status, user_notes, places_enriched_at = row
 
     # Attributes
     attr_rows = get_attributes(con, entity_id)
@@ -1079,7 +1104,7 @@ def get_entity(entity_name: str):
             source_ts = ts_row[0] if ts_row else None
         attributes.append(AttributeOut(
             attr_type=attr_type, key=key, value=display_value,
-            source_log_id=source_log_id, source_ts=source_ts,
+            source_log_id=source_log_id, source_ts=source_ts, provenance=provenance,
         ))
 
     # Mentions
@@ -1123,8 +1148,31 @@ def get_entity(entity_name: str):
     return EntityDetail(
         id=entity_id, name=name, type=entity_type.lower(), status=status,
         user_notes=user_notes,
+        places_enriched_at=places_enriched_at,
         attributes=attributes, mentions=mentions, relationships=relationships,
     )
+
+
+@app.post("/api/entities/{entity_id}/clear-enrichment", response_model=EntityDetail)
+def clear_enrichment(entity_id: int):
+    """Remove auto:places attributes and mark as rejected so it won't re-fire."""
+    con = _get_con()
+    row = con.execute(
+        "SELECT canonical_name FROM Entity WHERE id = ? AND merged_into_id IS NULL",
+        (entity_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    con.execute(
+        "DELETE FROM Attribute WHERE entity_id = ? AND provenance = 'auto:places'",
+        (entity_id,),
+    )
+    con.execute(
+        "UPDATE Entity SET places_enriched_at = 'rejected' WHERE id = ?",
+        (entity_id,),
+    )
+    con.commit()
+    return get_entity(row[0])
 
 
 class EntityCreate(BaseModel):

@@ -54,6 +54,7 @@ export interface AttributeOut {
   value: string
   source_log_id: number | null
   source_ts: string | null
+  provenance: string | null
 }
 
 export interface MentionOut {
@@ -77,6 +78,7 @@ export interface EntityDetail {
   type: string
   status: string
   user_notes: string | null
+  places_enriched_at: string | null
   attributes: AttributeOut[]
   mentions: MentionOut[]
   relationships: RelationshipOut[]

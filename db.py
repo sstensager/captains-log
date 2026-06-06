@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS Log (
     created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT,
     source_type TEXT    NOT NULL DEFAULT 'text',
-    tags        TEXT    NOT NULL DEFAULT '[]'
+    tags        TEXT    NOT NULL DEFAULT '[]',
+    latitude    REAL,
+    longitude   REAL
 );
 
 CREATE TABLE IF NOT EXISTS Annotation (
@@ -45,7 +47,8 @@ CREATE TABLE IF NOT EXISTS Entity (
     status              TEXT    NOT NULL DEFAULT 'tentative',  -- tentative|stable|merged
     merged_into_id      INTEGER REFERENCES Entity(id),
     created_from_log_id INTEGER REFERENCES Log(id),
-    created_at          TEXT    NOT NULL DEFAULT (datetime('now'))
+    created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+    places_enriched_at  TEXT    -- NULL=never run, 'failed'=no match, 'rejected'=user cleared
 );
 
 CREATE INDEX IF NOT EXISTS idx_entity_name ON Entity(LOWER(canonical_name));
@@ -169,6 +172,9 @@ def _run_migrations(con: sqlite3.Connection) -> None:
             sections_json TEXT    NOT NULL,
             created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
         )""",
+        "ALTER TABLE Log ADD COLUMN latitude REAL",
+        "ALTER TABLE Log ADD COLUMN longitude REAL",
+        "ALTER TABLE Entity ADD COLUMN places_enriched_at TEXT",
     ]
     for sql in migrations:
         try:
@@ -189,11 +195,17 @@ def init_db() -> sqlite3.Connection:
     return con
 
 
-def insert_log(con: sqlite3.Connection, raw_text: str, source_type: str = "text") -> int:
+def insert_log(
+    con: sqlite3.Connection,
+    raw_text: str,
+    source_type: str = "text",
+    latitude: float | None = None,
+    longitude: float | None = None,
+) -> int:
     """Write a new log entry. Returns the new log_id."""
     cur = con.execute(
-        "INSERT INTO Log (raw_text, source_type) VALUES (?, ?)",
-        (raw_text, source_type),
+        "INSERT INTO Log (raw_text, source_type, latitude, longitude) VALUES (?, ?, ?, ?)",
+        (raw_text, source_type, latitude, longitude),
     )
     log_id = cur.lastrowid
     con.execute("INSERT INTO Log_fts(rowid, raw_text) VALUES (?, ?)", (log_id, raw_text))
@@ -287,7 +299,7 @@ def get_attributes(con: sqlite3.Connection, entity_id: int) -> list[tuple]:
                confidence, provenance, source_log_id
         FROM Attribute
         WHERE entity_id = ?
-        ORDER BY attr_type, key, created_at
+        ORDER BY provenance = 'auto:places' DESC, attr_type, key, created_at
     """, (entity_id,)).fetchall()
 
 

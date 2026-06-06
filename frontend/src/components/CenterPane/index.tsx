@@ -1151,7 +1151,18 @@ function ComposeView({
     if (!text.trim() || submitting) return
     setSubmitting(true)
     try {
-      const log = await createLog(text.trim())
+      let lat: number | null = null
+      let lng: number | null = null
+      if (navigator.geolocation) {
+        await new Promise<void>(resolve => {
+          navigator.geolocation.getCurrentPosition(
+            pos => { lat = pos.coords.latitude; lng = pos.coords.longitude; resolve() },
+            () => resolve(),
+            { timeout: 3000, maximumAge: 60000 },
+          )
+        })
+      }
+      const log = await createLog(text.trim(), lat, lng)
       onLogCreated(log)
     } catch {
       setSubmitting(false)

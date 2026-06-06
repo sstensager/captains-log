@@ -3,7 +3,7 @@ import type { Annotation, EntityDetail, EntitySummary } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate } from '../../utils/time'
 import AnnotatedText from '../AnnotatedText'
-import { updateEntity, deleteEntity, mergeEntity, fetchEntities, promoteAnnotation } from '../../api'
+import { updateEntity, deleteEntity, mergeEntity, fetchEntities, promoteAnnotation, clearEnrichment } from '../../api'
 
 // Keep in sync with VALID_ENTITY_TYPES in server.py
 const ENTITY_TYPES = ['person', 'place', 'pet', 'organization', 'event', 'thing', 'idea']
@@ -82,6 +82,18 @@ export default function EntityDetailView({
   const [savingType, setSavingType] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [clearingEnrichment, setClearingEnrichment] = useState(false)
+
+  const handleClearEnrichment = async () => {
+    if (clearingEnrichment) return
+    setClearingEnrichment(true)
+    try {
+      const updated = await clearEnrichment(entity.id)
+      onUpdated?.(updated)
+    } finally {
+      setClearingEnrichment(false)
+    }
+  }
 
   const copyAllLogs = () => {
     const text = entity.mentions
@@ -244,9 +256,43 @@ export default function EntityDetailView({
         )}
       </section>
 
-      {/* Attributes — grouped by attr_type */}
-      {entity.attributes.length > 0 && (() => {
-        const grouped = entity.attributes.reduce<Record<string, typeof entity.attributes>>((acc, a) => {
+      {/* Places enrichment — auto:places attributes */}
+      {(() => {
+        const placeAttrs = entity.attributes.filter(a => a.provenance === 'auto:places')
+        const isEnriched = entity.places_enriched_at &&
+          entity.places_enriched_at !== 'failed' &&
+          entity.places_enriched_at !== 'rejected'
+        if (!isEnriched || placeAttrs.length === 0) return null
+        const LABEL: Record<string, string> = {
+          city: 'City', venue_type: 'Type', formatted_address: 'Address',
+          price_level: 'Price', place_id: 'Place ID',
+        }
+        return (
+          <section className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Location data</h3>
+              <button
+                onClick={handleClearEnrichment}
+                disabled={clearingEnrichment}
+                className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-40 transition-colors"
+              >
+                {clearingEnrichment ? 'Clearing…' : 'Wrong place?'}
+              </button>
+            </div>
+            {placeAttrs.filter(a => a.key !== 'place_id').map(attr => (
+              <div key={attr.key} className="flex justify-between text-sm">
+                <span className="text-blue-500">{LABEL[attr.key] ?? attr.key}</span>
+                <span className="text-gray-800 font-medium">{attr.value}</span>
+              </div>
+            ))}
+          </section>
+        )
+      })()}
+
+      {/* Attributes — grouped by attr_type, excluding auto:places */}
+      {entity.attributes.filter(a => a.provenance !== 'auto:places').length > 0 && (() => {
+        const nonPlace = entity.attributes.filter(a => a.provenance !== 'auto:places')
+        const grouped = nonPlace.reduce<Record<string, typeof entity.attributes>>((acc, a) => {
           const t = a.attr_type || 'fact'
           if (!acc[t]) acc[t] = []
           acc[t].push(a)

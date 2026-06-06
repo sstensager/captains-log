@@ -39,8 +39,12 @@ export const searchLogs = (q: string): Promise<LogSummary[]> =>
 export const fetchLog = (id: number): Promise<LogDetail> =>
   get(`/logs/${id}`)
 
-export const createLog = (raw_text: string): Promise<LogDetail> =>
-  post('/logs', { raw_text })
+export const createLog = (
+  raw_text: string,
+  latitude?: number | null,
+  longitude?: number | null,
+): Promise<LogDetail> =>
+  post('/logs', { raw_text, latitude, longitude })
 
 export const updateLog = (id: number, raw_text: string): Promise<LogDetail> =>
   patch(`/logs/${id}`, { raw_text })
@@ -103,6 +107,9 @@ export const deleteEntity = async (id: number): Promise<void> => {
 
 export const mergeEntity = (id: number, targetId: number): Promise<EntityDetail> =>
   post(`/entities/${id}/merge`, { target_id: targetId })
+
+export const clearEnrichment = (id: number): Promise<EntityDetail> =>
+  post(`/entities/${id}/clear-enrichment`)
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 
