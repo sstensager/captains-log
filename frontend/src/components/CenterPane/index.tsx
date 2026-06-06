@@ -1158,7 +1158,7 @@ function ComposeView({
           navigator.geolocation.getCurrentPosition(
             pos => { lat = pos.coords.latitude; lng = pos.coords.longitude; resolve() },
             () => resolve(),
-            { timeout: 3000, maximumAge: 60000 },
+            { timeout: 10000, maximumAge: 60000 },
           )
         })
       }

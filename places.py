@@ -169,11 +169,34 @@ _home_coords: tuple[float, float] | None = None
 _home_coords_fetched = False
 
 
-def _resolve_location(lat: float | None, lng: float | None) -> tuple[float | None, float | None]:
-    """Return device lat/lng if provided, else fall back to HOME_REGION coords."""
+def _ip_coords(client_ip: str) -> tuple[float, float] | None:
+    """City-level coords from ip-api.com. Returns None for private/unresolvable IPs."""
+    if not client_ip or client_ip in ("127.0.0.1", "::1", "localhost"):
+        return None
+    try:
+        r = requests.get(f"http://ip-api.com/json/{client_ip}?fields=status,lat,lon",
+                         timeout=3)
+        data = r.json()
+        if data.get("status") == "success":
+            return data["lat"], data["lon"]
+    except Exception:
+        pass
+    return None
+
+
+def _resolve_location(
+    lat: float | None,
+    lng: float | None,
+    client_ip: str | None = None,
+) -> tuple[float | None, float | None]:
+    """Return device lat/lng if provided, else IP geolocation, else HOME_REGION coords."""
     global _home_coords, _home_coords_fetched
     if lat is not None and lng is not None:
         return lat, lng
+    if client_ip:
+        ip_result = _ip_coords(client_ip)
+        if ip_result:
+            return ip_result
     if not _home_coords_fetched:
         _home_coords = _home_region()
         _home_coords_fetched = True
@@ -188,6 +211,7 @@ def enrich_place(
     lat: float | None,
     lng: float | None,
     con: sqlite3.Connection,
+    client_ip: str | None = None,
 ) -> bool:
     """
     Look up a place name via Places API and write auto:places Attributes.
@@ -199,7 +223,7 @@ def enrich_place(
         log.warning("PLACES_API_KEY not set — skipping enrichment for entity %d", entity_id)
         return False
 
-    resolved_lat, resolved_lng = _resolve_location(lat, lng)
+    resolved_lat, resolved_lng = _resolve_location(lat, lng, client_ip)
     result = client.search(name, resolved_lat, resolved_lng)
 
     if result is None or result.confidence < 0.5:

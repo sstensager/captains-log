@@ -631,7 +631,7 @@ def patch_log_tags(log_id: int, body: LogTagsPatch):
 
 
 @app.post("/api/logs", response_model=LogDetail, status_code=201)
-def create_log(body: LogCreate, background_tasks: BackgroundTasks):
+def create_log(body: LogCreate, background_tasks: BackgroundTasks, request: Request):
     con = _get_con()
     text = body.raw_text.strip()
     log_id = insert_log(con, text, latitude=body.latitude, longitude=body.longitude)
@@ -639,7 +639,11 @@ def create_log(body: LogCreate, background_tasks: BackgroundTasks):
         "SELECT created_at FROM Log WHERE id = ?", (log_id,)
     ).fetchone()[0]
 
-    background_tasks.add_task(_bg_parse_and_promote, log_id, text, body.latitude, body.longitude)
+    # Real client IP — Fly.io puts it in X-Forwarded-For
+    forwarded = request.headers.get("x-forwarded-for", "")
+    client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else None)
+
+    background_tasks.add_task(_bg_parse_and_promote, log_id, text, body.latitude, body.longitude, client_ip)
 
     return LogDetail(
         id=log_id,
@@ -671,6 +675,7 @@ def _bg_parse_and_promote(
     raw_text: str,
     lat: float | None = None,
     lng: float | None = None,
+    client_ip: str | None = None,
 ) -> None:
     """Annotate a log and promote entity mentions. Runs in a background thread."""
     from parser import annotate_log
@@ -694,17 +699,20 @@ def _bg_parse_and_promote(
             extract_links(log_id, new_text, con)
         promote_all_mentions(con, min_confidence=0.7)
 
-        # Enrich any newly-created Place entities from this log that haven't been enriched yet
+        # Enrich any entities referenced in this log via a candidate_place annotation
+        # (uses annotation type, not entity type, so renamed/mistyped entities still get enriched)
         place_rows = con.execute("""
-            SELECT e.id, e.canonical_name
-            FROM Entity e
-            JOIN EntityReference er ON er.entity_id = e.id
-            WHERE er.log_id = ? AND e.entity_type = 'Place' AND e.places_enriched_at IS NULL
+            SELECT DISTINCT er.entity_id, e.canonical_name
+            FROM EntityReference er
+            JOIN Entity e ON e.id = er.entity_id
+            JOIN Annotation a ON a.id = er.annotation_id
+            WHERE er.log_id = ? AND a.type = 'candidate_place'
+              AND e.places_enriched_at IS NULL
               AND e.merged_into_id IS NULL
         """, (log_id,)).fetchall()
         for entity_id, name in place_rows:
             try:
-                enrich_place(entity_id, name, lat, lng, con)
+                enrich_place(entity_id, name, lat, lng, con, client_ip)
             except Exception as enrich_err:
                 print(f"[places enrich error] entity {entity_id} ({name}): {enrich_err}")
 
