@@ -117,10 +117,21 @@ export interface QueryLogResult {
   score: number
 }
 
+export interface QueryDebug {
+  engine: string
+  entity_names: string[]
+  entity_type: string | null
+  occurrence: string | null
+  date_range: { start: string; end: string } | null
+  keywords: string[]
+  tags: string[]
+  intent: string
+}
+
 export interface QueryResponse {
   answer: string | null
   logs: QueryLogResult[]
-  plan: Record<string, unknown>
+  plan: QueryDebug | Record<string, unknown>
 }
 
 export interface QueryHistoryItem {

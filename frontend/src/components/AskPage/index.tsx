@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { QueryHistoryItem, QueryResponse } from '../../types'
+import type { QueryDebug, QueryHistoryItem, QueryResponse } from '../../types'
 import { fetchQueryHistory, naturalLanguageQuery } from '../../api'
 import { relativeDate, shortTime } from '../../utils/time'
 
@@ -25,6 +25,61 @@ function SourceLogCard({
       </div>
       <div className="text-sm text-gray-700 leading-snug line-clamp-3">{preview}</div>
     </button>
+  )
+}
+
+function DebugPanel({ debug, logs }: { debug: QueryDebug; logs: QueryResponse['logs'] }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 text-xs font-mono">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 text-gray-400 hover:text-gray-600 transition-colors"
+      >
+        <span className="font-sans font-semibold text-[10px] uppercase tracking-widest">
+          Debug — engine: <span className="text-indigo-500">{debug.engine}</span>
+        </span>
+        <span>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="border-t border-gray-200 px-3 py-3 flex flex-col gap-2 text-[11px] text-gray-600">
+          <Row label="intent" value={debug.intent} />
+          <Row label="engine" value={debug.engine} highlight />
+          {debug.entity_names.length > 0 && (
+            <Row label="entity_names" value={debug.entity_names.join(', ')} />
+          )}
+          {debug.entity_type && <Row label="entity_type" value={debug.entity_type} />}
+          {debug.occurrence && <Row label="occurrence" value={debug.occurrence} />}
+          {debug.date_range && (
+            <Row label="date_range" value={`${debug.date_range.start} → ${debug.date_range.end}`} />
+          )}
+          {debug.keywords.length > 0 && (
+            <Row label="keywords" value={debug.keywords.join(', ')} />
+          )}
+          {debug.tags.length > 0 && <Row label="tags" value={debug.tags.join(', ')} />}
+          {logs.length > 0 && (
+            <div className="mt-1 border-t border-gray-200 pt-2">
+              <div className="text-[10px] text-gray-400 mb-1 font-sans uppercase tracking-widest">Retrieved logs (score)</div>
+              {logs.map(l => (
+                <div key={l.log_id} className="flex justify-between gap-2 py-0.5">
+                  <span className="text-gray-500 truncate">{l.raw_text.slice(0, 60)}…</span>
+                  <span className="text-gray-400 shrink-0">{l.score.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="flex gap-2">
+      <span className="text-gray-400 shrink-0 w-28">{label}</span>
+      <span className={highlight ? 'text-indigo-600 font-semibold' : 'text-gray-700'}>{value}</span>
+    </div>
   )
 }
 
@@ -215,6 +270,10 @@ export default function AskPage({ onSelectLog }: Props) {
 
               {result.answer && result.logs.length === 0 && (
                 <p className="text-xs text-gray-400 italic px-1">No source logs found.</p>
+              )}
+
+              {result.plan && 'engine' in result.plan && (
+                <DebugPanel debug={result.plan as QueryDebug} logs={result.logs} />
               )}
             </div>
           )}

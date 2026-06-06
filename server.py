@@ -357,7 +357,7 @@ def natural_language_query(q: str, today: str = ""):
     return QueryResponse(
         answer=answer,
         logs=[QueryLogResult(**l) for l in logs],
-        plan=plan.model_dump(),
+        plan=result.model_dump(),
     )
 
 
