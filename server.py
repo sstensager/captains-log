@@ -718,7 +718,7 @@ def _bg_parse_and_promote(
             FROM EntityReference er
             JOIN Entity e ON e.id = er.entity_id
             JOIN Annotation a ON a.id = er.annotation_id
-            WHERE er.log_id = ? AND a.type = 'candidate_place'
+            WHERE er.log_id = ? AND a.type IN ('candidate_place', 'place')
               AND e.places_enriched_at IS NULL
               AND e.merged_into_id IS NULL
         """, (log_id,)).fetchall()
