@@ -210,6 +210,11 @@ candidate_place — any named location: restaurants, parks, cities, campgrounds,
   Include store/place names used as list headers ("Costco extras:", "Target run").
   The test: would this name appear on a sign, map, or receipt? If yes, include it.
   Do NOT include generic descriptions ("the playground", "a restaurant", "home", "the office").
+  IMPORTANT — restaurants named after people: many restaurants use a person's name
+  ("Dario's", "Magins", "Ruth's Chris", "Dave's Hot Chicken"). When context indicates a
+  venue — "at [Name]", "went to [Name]", food or drinks mentioned alongside the name,
+  a receipt or bill context — classify as candidate_place even if the name sounds like
+  a person. Only use candidate_person if the note clearly refers to a human being.
 
 candidate_pet — any named animal belonging to or known by the narrator
   e.g. "Biscuit", "our dog Max", "the neighbor's cat Whiskers"
