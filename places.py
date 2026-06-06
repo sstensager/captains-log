@@ -241,7 +241,7 @@ def enrich_place(
         (entity_id,),
     )
 
-    attrs = [("formatted_address", result.formatted_address), ("place_id", result.place_id)]
+    attrs = [("place_name", result.name), ("formatted_address", result.formatted_address), ("place_id", result.place_id)]
     if result.city:
         attrs.append(("city", result.city))
     if result.venue_type:
