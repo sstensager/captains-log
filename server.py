@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from db import DB_PATH, get_attributes, init_db, insert_log, rebuild_fts
-from promote import extract_todos, extract_links, promote_all_mentions, write_suggested_markers
+from promote import extract_todos, extract_links, promote_all_mentions, write_suggested_markers, MENTION_TYPE_TO_ENTITY_TYPE
 
 app = FastAPI(title="Captain's Log API")
 
@@ -692,12 +692,23 @@ def _bg_parse_and_promote(
         # Write {Name} markers for LLM detections, then re-derive annotations from text
         new_text = write_suggested_markers(log_id, raw_text, con)
         if new_text != raw_text:
+            # Capture entity type hints before deleting LLM annotations so extract_links
+            # can create entities with the correct type instead of defaulting to Person.
+            type_hint_rows = con.execute(
+                "SELECT LOWER(COALESCE(value, text_span)), type FROM Annotation "
+                "WHERE log_id = ? AND provenance NOT IN ('user', 'text') AND (value IS NOT NULL OR text_span IS NOT NULL)",
+                (log_id,),
+            ).fetchall()
+            entity_type_hints = {
+                name: MENTION_TYPE_TO_ENTITY_TYPE.get(ann_type, 'Person')
+                for name, ann_type in type_hint_rows if name
+            }
             con.execute(
                 "DELETE FROM Annotation WHERE log_id = ? AND provenance NOT IN ('user', 'text')",
                 (log_id,),
             )
             con.commit()
-            extract_links(log_id, new_text, con)
+            extract_links(log_id, new_text, con, entity_type_hints=entity_type_hints)
         promote_all_mentions(con, min_confidence=0.7)
 
         # Enrich any entities referenced in this log via a candidate_place annotation

@@ -268,7 +268,12 @@ _LINK_RE      = re.compile(r'\[\[([^\]]+)\]\]')
 _SOFT_LINK_RE = re.compile(r'\{([^}]+)\}')
 
 
-def extract_links(log_id: int, raw_text: str, con: sqlite3.Connection) -> dict:
+def extract_links(
+    log_id: int,
+    raw_text: str,
+    con: sqlite3.Connection,
+    entity_type_hints: dict[str, str] | None = None,
+) -> dict:
     """
     Find [[Name]] and {Name} patterns in raw_text and create annotations.
 
@@ -359,13 +364,14 @@ def extract_links(log_id: int, raw_text: str, con: sqlite3.Connection) -> dict:
         if row:
             entity_id, entity_type_str = row[0], row[1]
         else:
+            hinted_type = (entity_type_hints or {}).get(name.lower(), 'Person')
             cur = con.execute(
                 "INSERT INTO Entity (canonical_name, entity_type, status, created_from_log_id) "
-                "VALUES (?, 'Person', 'tentative', ?)",
-                (name, log_id),
+                "VALUES (?, ?, 'tentative', ?)",
+                (name, hinted_type, log_id),
             )
             entity_id      = cur.lastrowid
-            entity_type_str = 'Person'
+            entity_type_str = hinted_type
 
         ann_type = entity_type_str.lower()
 
