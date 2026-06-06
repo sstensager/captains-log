@@ -49,6 +49,7 @@ export interface EntitySummary {
 }
 
 export interface AttributeOut {
+  id: number
   attr_type: string  // 'rating' | 'age' | 'fact'
   key: string
   value: string

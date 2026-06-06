@@ -3,7 +3,7 @@ import type { Annotation, EntityDetail, EntitySummary } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate } from '../../utils/time'
 import AnnotatedText from '../AnnotatedText'
-import { updateEntity, deleteEntity, mergeEntity, fetchEntities, promoteAnnotation, clearEnrichment } from '../../api'
+import { updateEntity, deleteEntity, mergeEntity, fetchEntities, promoteAnnotation, addAttribute, updateAttribute, deleteAttribute } from '../../api'
 
 // Keep in sync with VALID_ENTITY_TYPES in server.py
 const ENTITY_TYPES = ['person', 'place', 'pet', 'organization', 'event', 'thing', 'idea']
@@ -82,16 +82,52 @@ export default function EntityDetailView({
   const [savingType, setSavingType] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [clearingEnrichment, setClearingEnrichment] = useState(false)
 
-  const handleClearEnrichment = async () => {
-    if (clearingEnrichment) return
-    setClearingEnrichment(true)
+  // ── Properties (attributes) editing ───────────────────────────────────────
+  const [editingAttrId, setEditingAttrId] = useState<number | null>(null)
+  const [editKey, setEditKey] = useState('')
+  const [editValue, setEditValue] = useState('')
+  const [savingAttr, setSavingAttr] = useState(false)
+  const [addingProp, setAddingProp] = useState(false)
+  const [newKey, setNewKey] = useState('')
+  const [newValue, setNewValue] = useState('')
+
+  const startEditAttr = (attr: { id: number; key: string; value: string }) => {
+    setEditingAttrId(attr.id)
+    setEditKey(attr.key)
+    setEditValue(attr.value)
+  }
+
+  const cancelEditAttr = () => { setEditingAttrId(null) }
+
+  const commitEditAttr = async () => {
+    if (!editingAttrId || savingAttr) return
+    setSavingAttr(true)
     try {
-      const updated = await clearEnrichment(entity.id)
+      const updated = await updateAttribute(editingAttrId, { key: editKey.trim(), value: editValue.trim() })
       onUpdated?.(updated)
+      setEditingAttrId(null)
     } finally {
-      setClearingEnrichment(false)
+      setSavingAttr(false)
+    }
+  }
+
+  const handleDeleteAttr = async (attrId: number) => {
+    const updated = await deleteAttribute(attrId)
+    onUpdated?.(updated)
+  }
+
+  const commitNewProp = async () => {
+    const k = newKey.trim(); const v = newValue.trim()
+    if (!k || !v || savingAttr) return
+    setSavingAttr(true)
+    try {
+      const updated = await addAttribute(entity.id, k, v)
+      onUpdated?.(updated)
+      setAddingProp(false)
+      setNewKey(''); setNewValue('')
+    } finally {
+      setSavingAttr(false)
     }
   }
 
@@ -256,68 +292,81 @@ export default function EntityDetailView({
         )}
       </section>
 
-      {/* Places enrichment — auto:places attributes */}
-      {(() => {
-        const placeAttrs = entity.attributes.filter(a => a.provenance === 'auto:places')
-        const isEnriched = entity.places_enriched_at &&
-          entity.places_enriched_at !== 'failed' &&
-          entity.places_enriched_at !== 'rejected'
-        if (!isEnriched || placeAttrs.length === 0) return null
-        const LABEL: Record<string, string> = {
-          city: 'City', venue_type: 'Type', formatted_address: 'Address',
-          price_level: 'Price', place_id: 'Place ID',
-        }
-        return (
-          <section className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Location data</h3>
-              <button
-                onClick={handleClearEnrichment}
-                disabled={clearingEnrichment}
-                className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-40 transition-colors"
-              >
-                {clearingEnrichment ? 'Clearing…' : 'Wrong place?'}
-              </button>
-            </div>
-            {placeAttrs.filter(a => a.key !== 'place_id').map(attr => (
-              <div key={attr.key} className="flex justify-between text-sm">
-                <span className="text-blue-500">{LABEL[attr.key] ?? attr.key}</span>
-                <span className="text-gray-800 font-medium">{attr.value}</span>
-              </div>
-            ))}
-          </section>
-        )
-      })()}
-
-      {/* Attributes — grouped by attr_type, excluding auto:places */}
-      {entity.attributes.filter(a => a.provenance !== 'auto:places').length > 0 && (() => {
-        const nonPlace = entity.attributes.filter(a => a.provenance !== 'auto:places')
-        const grouped = nonPlace.reduce<Record<string, typeof entity.attributes>>((acc, a) => {
-          const t = a.attr_type || 'fact'
-          if (!acc[t]) acc[t] = []
-          acc[t].push(a)
-          return acc
-        }, {})
-        return (
-          <section>
-            {Object.entries(grouped).map(([type, attrs]) => (
-              <div key={type} className="mb-3">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                  {type === 'fact' ? 'Facts' : type.charAt(0).toUpperCase() + type.slice(1) + 's'}
-                </h3>
-                <div className="space-y-1">
-                  {attrs.map(attr => (
-                    <div key={attr.key} className="flex justify-between text-sm">
-                      <span className="text-gray-500">{attr.key}</span>
-                      <span className="text-gray-800 font-medium">{attr.value}</span>
-                    </div>
-                  ))}
+      {/* Properties — unified editable key:value list */}
+      <section>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Properties</h3>
+        <div className="space-y-0.5">
+          {entity.attributes.map(attr => {
+            const isAuto = attr.provenance === 'auto:places'
+            const isEditing = editingAttrId === attr.id
+            if (isEditing) {
+              return (
+                <div key={attr.id} className="flex gap-1.5 items-center py-1">
+                  <input
+                    className="w-28 shrink-0 text-xs border border-gray-300 rounded px-1.5 py-1 text-gray-600 focus:outline-none focus:border-blue-400"
+                    value={editKey}
+                    onChange={e => setEditKey(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') commitEditAttr(); if (e.key === 'Escape') cancelEditAttr() }}
+                  />
+                  <input
+                    autoFocus
+                    className="flex-1 text-xs border border-gray-300 rounded px-1.5 py-1 text-gray-800 focus:outline-none focus:border-blue-400"
+                    value={editValue}
+                    onChange={e => setEditValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') commitEditAttr(); if (e.key === 'Escape') cancelEditAttr() }}
+                  />
+                  <button onClick={commitEditAttr} disabled={savingAttr} className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-40 shrink-0">Save</button>
+                  <button onClick={cancelEditAttr} className="text-xs text-gray-400 hover:text-gray-600 shrink-0">✕</button>
                 </div>
+              )
+            }
+            return (
+              <div
+                key={attr.id}
+                className={`group flex items-center gap-2 py-1 rounded px-1 -mx-1 hover:bg-gray-50 cursor-pointer ${isAuto ? 'opacity-50 hover:opacity-100' : ''} transition-opacity`}
+                onClick={() => startEditAttr(attr)}
+              >
+                <span className="w-28 shrink-0 text-xs text-gray-500 truncate">{attr.key}</span>
+                <span className="flex-1 text-xs text-gray-800">{attr.value}</span>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDeleteAttr(attr.id) }}
+                  className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all text-xs shrink-0"
+                >✕</button>
               </div>
-            ))}
-          </section>
-        )
-      })()}
+            )
+          })}
+
+          {/* Add property row */}
+          {addingProp ? (
+            <div className="flex gap-1.5 items-center py-1">
+              <input
+                autoFocus
+                placeholder="key"
+                className="w-28 shrink-0 text-xs border border-gray-300 rounded px-1.5 py-1 text-gray-600 focus:outline-none focus:border-blue-400"
+                value={newKey}
+                onChange={e => setNewKey(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Tab') { e.preventDefault(); (e.currentTarget.nextElementSibling as HTMLInputElement)?.focus() } if (e.key === 'Escape') { setAddingProp(false); setNewKey(''); setNewValue('') } }}
+              />
+              <input
+                placeholder="value"
+                className="flex-1 text-xs border border-gray-300 rounded px-1.5 py-1 text-gray-800 focus:outline-none focus:border-blue-400"
+                value={newValue}
+                onChange={e => setNewValue(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') commitNewProp(); if (e.key === 'Escape') { setAddingProp(false); setNewKey(''); setNewValue('') } }}
+              />
+              <button onClick={commitNewProp} disabled={savingAttr} className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-40 shrink-0">Save</button>
+              <button onClick={() => { setAddingProp(false); setNewKey(''); setNewValue('') }} className="text-xs text-gray-400 hover:text-gray-600 shrink-0">✕</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAddingProp(true)}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors py-1 px-1 -mx-1"
+            >
+              + Add property
+            </button>
+          )}
+        </div>
+      </section>
 
       {/* Mentions */}
       {entity.mentions.length > 0 && (

@@ -28,6 +28,12 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
   return res.json()
 }
 
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`DELETE ${path} → ${res.status}`)
+  return res.json()
+}
+
 // ── Logs ──────────────────────────────────────────────────────────────────────
 
 export const fetchLogs = (): Promise<LogSummary[]> =>
@@ -108,8 +114,14 @@ export const deleteEntity = async (id: number): Promise<void> => {
 export const mergeEntity = (id: number, targetId: number): Promise<EntityDetail> =>
   post(`/entities/${id}/merge`, { target_id: targetId })
 
-export const clearEnrichment = (id: number): Promise<EntityDetail> =>
-  post(`/entities/${id}/clear-enrichment`)
+export const addAttribute = (entityId: number, key: string, value: string): Promise<EntityDetail> =>
+  post(`/entities/${entityId}/attributes`, { key, value })
+
+export const updateAttribute = (attrId: number, data: { key?: string; value?: string }): Promise<EntityDetail> =>
+  patch(`/attributes/${attrId}`, data)
+
+export const deleteAttribute = (attrId: number): Promise<EntityDetail> =>
+  del(`/attributes/${attrId}`)
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 

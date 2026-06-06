@@ -191,6 +191,7 @@ class EntitySummary(BaseModel):
 
 
 class AttributeOut(BaseModel):
+    id: int
     attr_type: str
     key: str
     value: str
@@ -1103,7 +1104,7 @@ def get_entity(entity_name: str):
     # Attributes
     attr_rows = get_attributes(con, entity_id)
     attributes = []
-    for _, attr_type, key, display_value, confidence, provenance, source_log_id in attr_rows:
+    for attr_id, attr_type, key, display_value, confidence, provenance, source_log_id in attr_rows:
         source_ts = None
         if source_log_id:
             ts_row = con.execute(
@@ -1111,7 +1112,7 @@ def get_entity(entity_name: str):
             ).fetchone()
             source_ts = ts_row[0] if ts_row else None
         attributes.append(AttributeOut(
-            attr_type=attr_type, key=key, value=display_value,
+            id=attr_id, attr_type=attr_type, key=key, value=display_value,
             source_log_id=source_log_id, source_ts=source_ts, provenance=provenance,
         ))
 
@@ -1161,9 +1162,19 @@ def get_entity(entity_name: str):
     )
 
 
-@app.post("/api/entities/{entity_id}/clear-enrichment", response_model=EntityDetail)
-def clear_enrichment(entity_id: int):
-    """Remove auto:places attributes and mark as rejected so it won't re-fire."""
+class AttributeCreate(BaseModel):
+    key: str
+    value: str
+    attr_type: str = "fact"
+
+
+class AttributePatch(BaseModel):
+    key: Optional[str] = None
+    value: Optional[str] = None
+
+
+@app.post("/api/entities/{entity_id}/attributes", response_model=EntityDetail)
+def add_attribute(entity_id: int, body: AttributeCreate):
     con = _get_con()
     row = con.execute(
         "SELECT canonical_name FROM Entity WHERE id = ? AND merged_into_id IS NULL",
@@ -1171,16 +1182,55 @@ def clear_enrichment(entity_id: int):
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Entity not found")
+    key = body.key.strip()
+    value = body.value.strip()
+    if not key or not value:
+        raise HTTPException(status_code=400, detail="Key and value are required")
     con.execute(
-        "DELETE FROM Attribute WHERE entity_id = ? AND provenance = 'auto:places'",
-        (entity_id,),
-    )
-    con.execute(
-        "UPDATE Entity SET places_enriched_at = 'rejected' WHERE id = ?",
-        (entity_id,),
+        "INSERT INTO Attribute (entity_id, attr_type, key, value, provenance) VALUES (?, ?, ?, ?, 'user')",
+        (entity_id, body.attr_type, key, value),
     )
     con.commit()
     return get_entity(row[0])
+
+
+@app.patch("/api/attributes/{attr_id}", response_model=EntityDetail)
+def update_attribute(attr_id: int, body: AttributePatch):
+    con = _get_con()
+    row = con.execute(
+        "SELECT a.entity_id, e.canonical_name FROM Attribute a "
+        "JOIN Entity e ON e.id = a.entity_id WHERE a.id = ?",
+        (attr_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Attribute not found")
+    entity_id, canonical_name = row
+    if body.key is not None:
+        con.execute("UPDATE Attribute SET key = ? WHERE id = ?", (body.key.strip(), attr_id))
+    if body.value is not None:
+        con.execute(
+            "UPDATE Attribute SET value = ?, corrected_value = NULL, provenance = 'user', "
+            "updated_at = datetime('now') WHERE id = ?",
+            (body.value.strip(), attr_id),
+        )
+    con.commit()
+    return get_entity(canonical_name)
+
+
+@app.delete("/api/attributes/{attr_id}", response_model=EntityDetail)
+def delete_attribute(attr_id: int):
+    con = _get_con()
+    row = con.execute(
+        "SELECT a.entity_id, e.canonical_name FROM Attribute a "
+        "JOIN Entity e ON e.id = a.entity_id WHERE a.id = ?",
+        (attr_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Attribute not found")
+    _, canonical_name = row
+    con.execute("DELETE FROM Attribute WHERE id = ?", (attr_id,))
+    con.commit()
+    return get_entity(canonical_name)
 
 
 class EntityCreate(BaseModel):
