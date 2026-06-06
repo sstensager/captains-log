@@ -344,15 +344,15 @@ def natural_language_query(q: str, today: str = ""):
         raise HTTPException(status_code=400, detail="Query required")
     import json as _json
     from openai import OpenAI
-    from nlq import parse_query, retrieve_for_query, synthesize_answer
+    from nlq import route_query, dispatch, synthesize_answer
     from datetime import date as _date
     from db import save_query_history
     client = OpenAI()
     con = _get_con()
     today_str = today or _date.today().isoformat()
-    plan = parse_query(client, q, today_str)
-    logs = retrieve_for_query(con, plan, limit=10, today=today_str)
-    answer = synthesize_answer(client, q, logs)
+    result = route_query(client, q, today_str)
+    logs = dispatch(con, result, today_str)
+    answer = synthesize_answer(client, q, logs, result.engine)
     save_query_history(con, q.strip(), answer, [l["log_id"] for l in logs])
     return QueryResponse(
         answer=answer,
