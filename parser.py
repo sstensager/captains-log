@@ -1,8 +1,11 @@
 import datetime
 import json
+import logging
 import os
 import re
 import sqlite3
+
+log = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -48,6 +51,7 @@ def create_and_parse_log(
     result = response.choices[0].message.parsed
 
     _resolve_spans(raw_text, result)
+    _reclassify_venue_persons(raw_text, result)
     insert_annotations(con, log_id, result, provenance=f"{PARSER_MODEL}/{PARSER_VERSION}")
     _save_tags(con, log_id, result.tags)
 
@@ -147,6 +151,7 @@ def annotate_log(
         ]
 
     _resolve_spans(raw_text, result)
+    _reclassify_venue_persons(raw_text, result)
     insert_annotations(con, log_id, result, provenance=f"{PARSER_MODEL}/{PARSER_VERSION}")
     _save_tags(con, log_id, result.tags)
     return result
@@ -179,6 +184,35 @@ def _resolve_spans(raw_text: str, result: ParseResult) -> None:
             if idx != -1:
                 annotation.start_char = idx
                 annotation.end_char   = idx + len(annotation.text_span)
+
+
+_VENUE_PREP_RE = re.compile(
+    r'\b(at|went\s+to|visited|tried|stopped\s+at|dinner\s+at|lunch\s+at|breakfast\s+at|brunch\s+at|eating\s+at|ate\s+at)\s*$',
+    re.IGNORECASE,
+)
+_FOOD_TAGS = {'restaurants', 'food', 'bars', 'coffee', 'wine', 'cooking', 'food & drink'}
+
+
+def _reclassify_venue_persons(raw_text: str, result) -> None:
+    """
+    Post-processing pass: reclassify candidate_person → candidate_place when
+    the mention is immediately preceded by a venue preposition AND the note has
+    a food/venue tag. Catches restaurant names that look like person names
+    (e.g. "at mcginns", "went to Dario's").
+    """
+    tags_set = {t.lower() for t in result.tags}
+    if not (tags_set & _FOOD_TAGS):
+        return
+
+    for mention in result.mentions:
+        if mention.candidate_type != 'candidate_person':
+            continue
+        if mention.start_char is None:
+            continue
+        prefix = raw_text[max(0, mention.start_char - 40):mention.start_char]
+        if _VENUE_PREP_RE.search(prefix):
+            log.info("Reclassified %r: person → place (venue prep + food tag)", mention.text)
+            mention.candidate_type = 'candidate_place'
 
 
 def _build_system_prompt(current_date: str) -> str:
