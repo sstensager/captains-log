@@ -631,6 +631,17 @@ def patch_log_tags(log_id: int, body: LogTagsPatch):
     return _get_log_detail(log_id)
 
 
+@app.delete("/api/logs/{log_id}", status_code=204)
+def delete_log(log_id: int):
+    con = _get_con()
+    if not con.execute("SELECT 1 FROM Log WHERE id = ?", (log_id,)).fetchone():
+        raise HTTPException(status_code=404, detail="Log not found")
+    con.execute("DELETE FROM Task WHERE source_log_id = ?", (log_id,))
+    con.execute("DELETE FROM Log_fts WHERE rowid = ?", (log_id,))
+    con.execute("DELETE FROM Log WHERE id = ?", (log_id,))
+    con.commit()
+
+
 @app.post("/api/logs", response_model=LogDetail, status_code=201)
 def create_log(body: LogCreate, background_tasks: BackgroundTasks, request: Request):
     con = _get_con()

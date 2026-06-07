@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import EmptyState from './EmptyState'
-import { fetchLog, createLog, fetchTasks, patchTask, updateLog, patchAnnotation, promoteAnnotation, relinkAnnotation, fetchEntities, patchLogTags, reparseLog } from '../../api'
+import { fetchLog, createLog, fetchTasks, patchTask, updateLog, patchAnnotation, promoteAnnotation, relinkAnnotation, fetchEntities, patchLogTags, reparseLog, deleteLog } from '../../api'
 import type { Annotation, EntitySummary, LogDetail, TaskOut } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate, shortTime } from '../../utils/time'
@@ -385,6 +385,7 @@ interface Props {
   onCancelCompose: () => void
   onLogCreated: (log: LogDetail) => void
   onLogUpdated: (log: LogDetail) => void
+  onLogDeleted?: (id: number) => void
   onEntityClick: (name: string) => void
   onTagClick: (tag: string) => void
   refreshKey?: number
@@ -1306,6 +1307,7 @@ export default function CenterPane({
   onCancelCompose,
   onLogCreated,
   onLogUpdated,
+  onLogDeleted,
   onEntityClick,
   onTagClick,
   refreshKey,
@@ -1321,11 +1323,14 @@ export default function CenterPane({
   const [tasks, setTasks] = useState<TaskOut[]>([])
   const [editing, setEditing] = useState(false)
   const [pendingReject, setPendingReject] = useState<{ name: string; ids: number[] } | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const enterEditing = (v: boolean) => { setEditing(v); onEditingChange?.(v) }
 
   useEffect(() => {
     enterEditing(false)
+    setConfirmDelete(false)
     if (!selectedLogId) { setLog(null); setTasks([]); return }
     setLoading(true)
     Promise.all([fetchLog(selectedLogId), fetchTasks(selectedLogId)]).then(([data, t]) => {
@@ -1445,14 +1450,46 @@ export default function CenterPane({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {log && (
-            <button
-              onClick={() => enterEditing(true)}
-              className="text-xs px-2.5 py-1 rounded border bg-white text-gray-600 border-gray-200 hover:border-gray-400 transition-colors"
-            >
-              Edit
-            </button>
-          )}
+          {log && confirmDelete ? (
+            <>
+              <span className="text-xs text-gray-500">Delete this log?</span>
+              <button
+                onClick={() => {
+                  setDeleting(true)
+                  deleteLog(log.id).then(() => {
+                    onLogDeleted?.(log.id)
+                    onBack?.()
+                  }).catch(() => setDeleting(false))
+                }}
+                disabled={deleting}
+                className="text-xs px-2.5 py-1 rounded border bg-red-600 text-white border-red-600 hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {deleting ? 'Deleting…' : 'Yes, delete'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-xs px-2.5 py-1 rounded border bg-white text-gray-600 border-gray-200 hover:border-gray-400 transition-colors"
+              >
+                Cancel
+              </button>
+            </>
+          ) : log ? (
+            <>
+              <button
+                onClick={() => { setConfirmDelete(false); enterEditing(true) }}
+                className="text-xs px-2.5 py-1 rounded border bg-white text-gray-600 border-gray-200 hover:border-gray-400 transition-colors"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="text-xs px-2.5 py-1 rounded border bg-white text-gray-400 border-gray-200 hover:border-red-300 hover:text-red-500 transition-colors"
+                title="Delete log"
+              >
+                Delete
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
 

@@ -61,6 +61,11 @@ export const patchLogTags = (id: number, user_tags: string[]): Promise<LogDetail
 export const reparseLog = (id: number): Promise<LogDetail> =>
   post(`/logs/${id}/reparse`)
 
+export const deleteLog = (id: number): Promise<void> =>
+  fetch(`/api/logs/${id}`, { method: 'DELETE' }).then(res => {
+    if (!res.ok) throw new Error(`DELETE /logs/${id} → ${res.status}`)
+  })
+
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
 export const fetchTasks = (logId: number): Promise<TaskOut[]> =>

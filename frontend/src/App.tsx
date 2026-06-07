@@ -90,6 +90,12 @@ export default function App() {
     ))
   }
 
+  const handleLogDeleted = (id: number) => {
+    setLogs(prev => prev.filter(l => l.id !== id))
+    setSelectedLogId(null)
+    setMobileView('list')
+  }
+
   const handleEntityClick = (name: string) => {
     setReturnLogId(selectedLogId)
     setEntityToNavigate(name)
@@ -197,6 +203,7 @@ export default function App() {
                 onCancelCompose={handleCancelCompose}
                 onLogCreated={handleLogCreated}
                 onLogUpdated={handleLogUpdated}
+                onLogDeleted={handleLogDeleted}
                 onEntityClick={handleEntityClick}
                 onTagClick={handleTagClick}
                 onBack={() => {
