@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createGeneratedList, fetchAllTasks, patchTask } from '../../api'
-import type { GeneratedListOut, TaskEntityRef, TaskOut, TasksActiveFilter, TasksStatusFilter } from '../../types'
+import type { TaskEntityRef, TaskOut, TasksActiveFilter, TasksStatusFilter } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate } from '../../utils/time'
 import AnnotatedText from '../AnnotatedText'
@@ -11,6 +11,7 @@ interface Props {
   initialFilter?: TasksActiveFilter
   initialStatusFilter?: TasksStatusFilter
   onSnapshot?: (filter: TasksActiveFilter, statusFilter: TasksStatusFilter) => void
+  onListCreated?: (listId: number) => void
 }
 
 // ── Snapshot types ────────────────────────────────────────────────────────────
@@ -97,96 +98,6 @@ function taskAge(isoDate: string | null): string {
   return `${Math.floor(days / 30)} mo ago`
 }
 
-function GeneratedListView({
-  list,
-  tasks,
-  onToggle,
-  onRegenerate,
-  onClose,
-  regenerating,
-}: {
-  list: GeneratedListOut
-  tasks: TaskOut[]
-  onToggle: (task: TaskOut) => void
-  onRegenerate: () => void
-  onClose: () => void
-  regenerating: boolean
-}) {
-  const taskById = (id: number) => tasks.find(t => t.id === id)
-
-  return (
-    <div className="w-full max-w-2xl space-y-4">
-      {/* List header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-gray-800">{list.title}</h2>
-          {list.description && (
-            <p className="text-xs text-gray-400 mt-0.5">{list.description}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={onRegenerate}
-            disabled={regenerating}
-            className="text-xs text-gray-400 hover:text-gray-700 disabled:opacity-40 transition-colors"
-          >
-            {regenerating ? 'Regenerating…' : 'Regenerate'}
-          </button>
-          <button
-            onClick={onClose}
-            className="text-xs text-gray-400 hover:text-gray-700 transition-colors"
-          >
-            ✕ Close
-          </button>
-        </div>
-      </div>
-
-      {/* Sections */}
-      {list.sections.map((section, si) => (
-        <div key={si} className="rounded-xl border bg-white shadow-sm overflow-hidden">
-          {/* Section header */}
-          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-            <div className="text-sm font-medium text-gray-700">{section.label}</div>
-            {section.description && (
-              <div className="text-xs text-gray-400 mt-0.5 italic">{section.description}</div>
-            )}
-          </div>
-          {/* Tasks */}
-          <div className="divide-y divide-gray-50">
-            {section.tasks.map(sectionTask => {
-              const live = taskById(sectionTask.id) ?? sectionTask
-              const done = live.status === 'done'
-              return (
-                <div
-                  key={live.id}
-                  onClick={() => onToggle(live)}
-                  className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer active:bg-gray-50 transition-opacity ${done ? 'opacity-50' : ''}`}
-                >
-                  <div
-                    className={`w-4 h-4 shrink-0 rounded border text-xs flex items-center justify-center transition-colors ${
-                      done ? 'bg-gray-900 border-gray-900 text-white' : 'border-gray-400'
-                    }`}
-                  >
-                    {done && '✓'}
-                  </div>
-                  <span className={`text-sm flex-1 min-w-0 break-words ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                    {live.title}
-                  </span>
-                  {live.log_created_at && (
-                    <span className="text-[10px] text-gray-300 shrink-0 tabular-nums">
-                      {taskAge(live.log_created_at)}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function EntityChip({ entity, onClick }: { entity: TaskEntityRef; onClick?: () => void }) {
   const c = colorFor(entity.type)
   return (
@@ -203,7 +114,7 @@ function EntityChip({ entity, onClick }: { entity: TaskEntityRef; onClick?: () =
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initialStatusFilter, onSnapshot }: Props) {
+export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initialStatusFilter, onSnapshot, onListCreated }: Props) {
   const [tasks, setTasks] = useState<TaskOut[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatusFilter ?? 'open')
@@ -216,7 +127,6 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
     initialFilter != null ? 'flat' : 'grouped'
   )
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
-  const [generatedList, setGeneratedList] = useState<GeneratedListOut | null>(null)
   const [organizing, setOrganizing] = useState(false)
 
   // Keep a ref so we can rebuild the snapshot without adding tasks as a dep
@@ -294,22 +204,9 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
     setOrganizing(true)
     try {
       const list = await createGeneratedList({ kind: filter.kind, value: filter.value })
-      setGeneratedList(list)
+      onListCreated?.(list.id)
     } catch (e) {
       console.error('Organize failed', e)
-    } finally {
-      setOrganizing(false)
-    }
-  }
-
-  const handleRegenerate = async () => {
-    if (!filter || filter.kind === 'search') return
-    setOrganizing(true)
-    try {
-      const list = await createGeneratedList({ kind: filter.kind, value: filter.value })
-      setGeneratedList(list)
-    } catch (e) {
-      console.error('Regenerate failed', e)
     } finally {
       setOrganizing(false)
     }
@@ -527,7 +424,7 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
       {/* Task groups */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6">
         {/* View mode toggle + Organize button — only shown when a filter is active */}
-        {filter && !generatedList && (
+        {filter && (
           <div className="flex items-center gap-2 mb-4 max-w-2xl">
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
               {(['flat', 'grouped'] as const).map(mode => (
@@ -564,16 +461,7 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
           </div>
         )}
 
-        {generatedList ? (
-          <GeneratedListView
-            list={generatedList}
-            tasks={tasks}
-            onToggle={toggle}
-            onRegenerate={handleRegenerate}
-            onClose={() => setGeneratedList(null)}
-            regenerating={organizing}
-          />
-        ) : loading ? (
+        {loading ? (
           <div className="text-sm text-gray-400">Loading…</div>
         ) : snapshotGroups.length === 0 ? (
           <div className="text-sm text-gray-400 mt-8 text-center">

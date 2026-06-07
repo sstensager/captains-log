@@ -4,10 +4,11 @@ import CenterPane from './components/CenterPane'
 import EntitiesPage from './components/EntitiesPage'
 import TasksPage from './components/TasksPage'
 import AskPage from './components/AskPage'
+import ListsPage from './components/ListsPage'
 import type { LogDetail, LogSummary, TasksActiveFilter, TasksStatusFilter } from './types'
 import { fetchLogs } from './api'
 
-type Page = 'logs' | 'entities' | 'tasks' | 'ask'
+type Page = 'logs' | 'entities' | 'tasks' | 'lists' | 'ask'
 type MobileView = 'list' | 'detail'
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
   const [pendingEdit, setPendingEdit] = useState(false)
   const [tasksFilter, setTasksFilter] = useState<TasksActiveFilter>(null)
   const [tasksStatusFilter, setTasksStatusFilter] = useState<TasksStatusFilter>('open')
+  const [listsInitialId, setListsInitialId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchLogs().then(data => { setLogs(data); setLoading(false) })
@@ -120,6 +122,11 @@ export default function App() {
     setMobileView('detail')
   }
 
+  const handleListCreated = (listId: number) => {
+    setPage('lists')
+    setListsInitialId(listId)
+  }
+
   const handleSelectLogFromAsk = (id: number) => {
     setPage('logs')
     setSelectedLogId(id)
@@ -155,6 +162,7 @@ export default function App() {
     { key: 'logs', label: 'Logs' },
     { key: 'entities', label: 'Nodes' },
     { key: 'tasks', label: 'Todos' },
+    { key: 'lists', label: 'Lists' },
     { key: 'ask', label: 'Ask' },
   ]
 
@@ -166,7 +174,7 @@ export default function App() {
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => { setPage(key); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
+            onClick={() => { setPage(key); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null); setListsInitialId(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
             className={`text-sm px-3 py-1 rounded transition-colors ${
               page === key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
             }`}
@@ -233,7 +241,10 @@ export default function App() {
             initialFilter={tasksFilter}
             initialStatusFilter={tasksStatusFilter}
             onSnapshot={(f, s) => { setTasksFilter(f); setTasksStatusFilter(s) }}
+            onListCreated={handleListCreated}
           />
+        ) : page === 'lists' ? (
+          <ListsPage initialSelectedId={listsInitialId} />
         ) : (
           <AskPage onSelectLog={handleSelectLogFromAsk} />
         )}

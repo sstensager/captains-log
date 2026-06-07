@@ -162,6 +162,11 @@ function ListDetail({
     )
   }
 
+  const filterMeta = (() => {
+    try { return JSON.parse(list.filter_json) as { kind: 'entity' | 'tag'; value: string } }
+    catch { return null }
+  })()
+
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8">
       <div className="max-w-2xl mx-auto space-y-4">
@@ -169,8 +174,10 @@ function ListDetail({
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
             <EditableTitle value={list.title} onSave={handleRename} />
-            {list.description && (
-              <p className="text-xs text-gray-400 mt-0.5">{list.description}</p>
+            {filterMeta && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                {filterMeta.kind === 'entity' ? 'Node' : 'Tag'}: <span className="font-medium text-gray-500">{filterMeta.value}</span>
+              </p>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -326,14 +333,17 @@ function ListsRail({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function ListsPage() {
+export default function ListsPage({ initialSelectedId }: { initialSelectedId?: number | null }) {
   const [lists, setLists] = useState<GeneratedListSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchGeneratedLists()
-      .then(setLists)
+      .then(data => {
+        setLists(data)
+        if (initialSelectedId != null) setSelectedId(initialSelectedId)
+      })
       .finally(() => setLoading(false))
   }, [])
 
