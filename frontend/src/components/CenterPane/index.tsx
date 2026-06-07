@@ -329,7 +329,8 @@ function renderBody(
 
     if (todoM) {
       const titleRaw = todoM[1]
-      const title = titleRaw.trim()
+      // Strip {Name} / [[Name]] markers before matching — tasks are stored from pre-marker text
+      const title = titleRaw.trim().replace(/\[\[([^\]]+)\]\]/g, '$1').replace(/\{([^}]+)\}/g, '$1')
       const task = tasks.find(t => t.title === title)
       const done = task ? task.status === 'done' : false
       const indent = (line.match(/^(\s*)/)?.[1].length ?? 0) / 2
