@@ -382,6 +382,7 @@ function renderBody(
 interface Props {
   selectedLogId: number | null
   composing: boolean
+  hasLogs: boolean
   onNewLog: () => void
   onCancelCompose: () => void
   onLogCreated: (log: LogDetail) => void
@@ -1209,6 +1210,11 @@ function ComposeView({
         <span className="text-sm text-gray-400">{relativeDate(new Date().toISOString())}</span>
         <span className="text-xs text-gray-300">⌘↵ to save · Esc to cancel</span>
       </div>
+      {!text && (
+        <p className="shrink-0 px-4 md:px-8 pt-4 pb-0 text-xs text-gray-300">
+          Tip: <span className="font-mono">[ ]</span> items become todos · names auto-link people & places
+        </p>
+      )}
       <div className="flex-1 flex flex-col p-4 md:p-8 min-h-0">
         <SmartTextarea
           value={text}
@@ -1304,6 +1310,7 @@ function Chip({
 export default function CenterPane({
   selectedLogId,
   composing,
+  hasLogs,
   onNewLog,
   onCancelCompose,
   onLogCreated,
@@ -1321,6 +1328,7 @@ export default function CenterPane({
   const [log, setLog] = useState<LogDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [parsing, setParsing] = useState(false)
+  const [justParsed, setJustParsed] = useState<{ people: number; places: number } | null>(null)
   const [tasks, setTasks] = useState<TaskOut[]>([])
   const [editing, setEditing] = useState(false)
   const [pendingReject, setPendingReject] = useState<{ name: string; ids: number[] } | null>(null)
@@ -1332,6 +1340,7 @@ export default function CenterPane({
   useEffect(() => {
     enterEditing(false)
     setConfirmDelete(false)
+    setJustParsed(null)
     if (!selectedLogId) { setLog(null); setTasks([]); return }
     setLoading(true)
     Promise.all([fetchLog(selectedLogId), fetchTasks(selectedLogId)]).then(([data, t]) => {
@@ -1351,11 +1360,31 @@ export default function CenterPane({
       Promise.all([fetchLog(log.id), fetchTasks(log.id)]).then(([data, t]) => {
         if (data.annotations.length > 0 || tries >= 10) {
           setLog(data); setTasks(t); setParsing(false); clearInterval(iv)
+          if (data.annotations.length > 0) {
+            const seen = new Set<string>()
+            let people = 0, places = 0
+            for (const a of data.annotations) {
+              if (a.status === 'rejected') continue
+              const key = `${a.type}:${a.value}`
+              if (seen.has(key)) continue
+              seen.add(key)
+              if (a.type === 'person') people++
+              if (a.type === 'place') places++
+            }
+            if (people > 0 || places > 0) setJustParsed({ people, places })
+          }
         }
       })
     }, 2000)
     return () => clearInterval(iv)
   }, [log?.id, log?.annotations.length])
+
+  // Auto-dismiss the post-parse callout after 7 seconds
+  useEffect(() => {
+    if (!justParsed) return
+    const timer = setTimeout(() => setJustParsed(null), 7000)
+    return () => clearTimeout(timer)
+  }, [justParsed])
 
   if (composing) {
     return (
@@ -1398,7 +1427,7 @@ export default function CenterPane({
   if (!selectedLogId) {
     return (
       <div className="flex-1 flex flex-col min-w-0">
-        <EmptyState onNewLog={onNewLog} />
+        <EmptyState onNewLog={onNewLog} hasLogs={hasLogs} />
       </div>
     )
   }
@@ -1572,7 +1601,19 @@ export default function CenterPane({
             />
 
             {parsing && (
-              <p className="text-xs text-gray-400 italic mt-2">Parsing…</p>
+              <p className="text-xs text-gray-400 italic mt-2">Finding people, places & todos…</p>
+            )}
+
+            {justParsed && (
+              <div className="flex items-center gap-2 mt-3 px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-lg text-xs text-indigo-700">
+                <span className="flex-1">
+                  Found {[
+                    justParsed.people > 0 && `${justParsed.people} ${justParsed.people === 1 ? 'person' : 'people'}`,
+                    justParsed.places > 0 && `${justParsed.places} ${justParsed.places === 1 ? 'place' : 'places'}`,
+                  ].filter(Boolean).join(' & ')} — tap the highlights to explore
+                </span>
+                <button onClick={() => setJustParsed(null)} className="opacity-40 hover:opacity-80 transition-opacity leading-none">×</button>
+              </div>
             )}
           </div>
         ) : null}

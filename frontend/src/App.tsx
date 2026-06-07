@@ -160,7 +160,7 @@ export default function App() {
 
   const NAV_ITEMS: { key: Page; label: string }[] = [
     { key: 'logs', label: 'Logs' },
-    { key: 'entities', label: 'Nodes' },
+    { key: 'entities', label: 'People & Places' },
     { key: 'tasks', label: 'Todos' },
     { key: 'lists', label: 'Lists' },
     { key: 'ask', label: 'Ask' },
@@ -207,6 +207,7 @@ export default function App() {
               <CenterPane
                 selectedLogId={selectedLogId}
                 composing={composing}
+                hasLogs={logs.length > 0}
                 onNewLog={handleNewLog}
                 onCancelCompose={handleCancelCompose}
                 onLogCreated={handleLogCreated}

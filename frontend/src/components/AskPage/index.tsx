@@ -105,6 +105,13 @@ function HistoryItem({
   )
 }
 
+const EXAMPLE_PROMPTS = [
+  'What restaurants have I mentioned?',
+  "What's been on my mind this week?",
+  'Who have I talked about most recently?',
+  'What todos are still open?',
+]
+
 export default function AskPage({ onSelectLog }: Props) {
   const [query, setQuery] = useState('')
   const [result, setResult] = useState<QueryResponse | null>(null)
@@ -230,6 +237,22 @@ export default function AskPage({ onSelectLog }: Props) {
               <p className="text-xs text-gray-400 px-1">↵ to ask</p>
             )}
           </div>
+
+          {/* Example prompts — shown when no history and no result yet */}
+          {!result && !loading && !error && history.length === 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-gray-400 px-1 font-semibold uppercase tracking-wide">Try asking</p>
+              {EXAMPLE_PROMPTS.map(prompt => (
+                <button
+                  key={prompt}
+                  onClick={() => { setQuery(prompt); runQuery(prompt) }}
+                  className="text-left text-sm text-gray-600 px-4 py-3 rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm transition-all"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Loading */}
           {loading && (

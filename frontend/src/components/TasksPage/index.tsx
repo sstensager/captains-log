@@ -278,7 +278,7 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
               <div className="overflow-y-auto px-4 py-3 space-y-4">
                 {allEntities.length > 0 && (
                   <div>
-                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nodes</div>
+                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">People & Places</div>
                     <div className="flex flex-col gap-1.5">
                       {allEntities.map(entity => {
                         const c = colorFor(entity.type)
