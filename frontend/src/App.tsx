@@ -156,7 +156,7 @@ export default function App() {
     <div ref={appRef} className="flex flex-col h-[100dvh] overflow-hidden w-full">
       {/* Top nav — desktop only */}
       <nav className="hidden md:flex shrink-0 items-center gap-1 px-4 py-2 border-b border-gray-200 bg-white">
-        <span className="text-sm font-semibold text-gray-800 mr-3">Captain's Log</span>
+        <span className="text-sm font-semibold text-gray-800 mr-3">CaptainSlog</span>
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}

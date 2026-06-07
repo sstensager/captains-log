@@ -54,7 +54,7 @@ export default function LeftRail({
       {/* Brand header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200">
         <div>
-          <div className="text-sm font-semibold text-gray-900">Captain's Log</div>
+          <div className="text-sm font-semibold text-gray-900">CaptainSlog</div>
           <div className="text-xs text-gray-400">personal knowledge</div>
         </div>
         <button
