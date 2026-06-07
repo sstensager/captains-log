@@ -88,15 +88,6 @@ function buildSnapshot(
   })
 }
 
-function taskAge(isoDate: string | null): string {
-  if (!isoDate) return ''
-  const days = Math.floor((Date.now() - new Date(isoDate).getTime()) / 86_400_000)
-  if (days < 1) return 'today'
-  if (days === 1) return '1 day ago'
-  if (days < 14) return `${days} days ago`
-  if (days < 60) return `${Math.floor(days / 7)} wk ago`
-  return `${Math.floor(days / 30)} mo ago`
-}
 
 function EntityChip({ entity, onClick }: { entity: TaskEntityRef; onClick?: () => void }) {
   const c = colorFor(entity.type)
@@ -182,7 +173,6 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
 
   const handleSearch = (q: string) => {
     setSearchInput(q)
-    setGeneratedList(null)
     if (q.trim()) {
       setFilter({ kind: 'search', query: q })
       setViewMode('flat')
@@ -194,7 +184,6 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
 
   const setPill = (kind: 'tag' | 'entity', value: string) => {
     const already = filter?.kind === kind && (filter as any).value === value
-    setGeneratedList(null)
     if (already) { setFilter(null); setSearchInput(''); setViewMode('grouped') }
     else { setFilter({ kind, value }); setSearchInput(''); setViewMode('flat') }
   }
