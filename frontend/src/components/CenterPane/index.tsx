@@ -22,6 +22,37 @@ const TAG_VOCABULARY = [
 const ENTITY_TYPES = new Set(['person', 'place', 'pet', 'organization', 'event', 'thing', 'idea'])
 const TODO_LINE_RE = /^\s*(?:[-*]\s+)?\[[ xX]?\]\s*(.*)/
 const BULLET_LINE_RE = /^(\s*)([-*])\s+(.*)/
+const INLINE_MARKER_RE = /\[\[([^\]]+)\]\]|\{([^}]+)\}/g
+
+function renderInlineMarkers(text: string, onEntityClick: (name: string) => void): React.ReactNode {
+  const nodes: React.ReactNode[] = []
+  let cursor = 0
+  for (const match of text.matchAll(INLINE_MARKER_RE)) {
+    const matchStart = match.index!
+    const matchEnd = matchStart + match[0].length
+    const isHard = match[0].startsWith('[[')
+    const name = (match[1] ?? match[2]).trim()
+    if (matchStart > cursor) nodes.push(text.slice(cursor, matchStart))
+    nodes.push(
+      <span
+        key={matchStart}
+        onClick={() => onEntityClick(name)}
+        style={{
+          textDecoration: 'underline',
+          textDecorationStyle: isHard ? 'solid' : 'dashed',
+          textDecorationColor: '#9ca3af',
+          cursor: 'pointer',
+        }}
+      >
+        {name}
+      </span>
+    )
+    cursor = matchEnd
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor))
+  if (nodes.length === 0) return text
+  return <>{nodes}</>
+}
 
 // ── Line-by-line body renderer ────────────────────────────────────────────────
 
@@ -240,7 +271,7 @@ function renderLineHighlights(
     }))
     .sort((a, b) => a.span_start! - b.span_start!)
 
-  if (spans.length === 0) return <>{line}</>
+  if (spans.length === 0) return renderInlineMarkers(line, onEntityClick)
 
   const nodes: React.ReactNode[] = []
   let cursor = 0
@@ -248,7 +279,7 @@ function renderLineHighlights(
     const s = ann.span_start!
     const e = ann.span_end!
     if (s < cursor) continue
-    if (s > cursor) nodes.push(line.slice(cursor, s))
+    if (s > cursor) nodes.push(renderInlineMarkers(line.slice(cursor, s), onEntityClick))
     const entityName = ann.corrected_value ?? ann.value ?? ''
     const rawSpan = line.slice(s, e)
     const isUserLink = rawSpan.startsWith('[[') && rawSpan.endsWith(']]')
@@ -271,7 +302,7 @@ function renderLineHighlights(
     )
     cursor = e
   }
-  if (cursor < line.length) nodes.push(line.slice(cursor))
+  if (cursor < line.length) nodes.push(renderInlineMarkers(line.slice(cursor), onEntityClick))
   return <>{nodes}</>
 }
 

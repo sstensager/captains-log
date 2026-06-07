@@ -680,7 +680,6 @@ def _bg_parse_and_promote(
 ) -> None:
     """Annotate a log and promote entity mentions. Runs in a background thread."""
     from parser import annotate_log
-    from places import enrich_place
     con = init_db()
     try:
         known = _fetch_known_entities(con)
@@ -724,6 +723,7 @@ def _bg_parse_and_promote(
         """, (log_id,)).fetchall()
         for entity_id, name in place_rows:
             try:
+                from places import enrich_place
                 enrich_place(entity_id, name, lat, lng, con, client_ip)
             except Exception as enrich_err:
                 print(f"[places enrich error] entity {entity_id} ({name}): {enrich_err}")
