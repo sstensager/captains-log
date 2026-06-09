@@ -121,10 +121,16 @@ function ListDetail({
     const filter = JSON.parse(list.filter_json) as { kind: 'entity' | 'tag'; value: string }
     setRegenerating(true)
     try {
-      const newList = await createGeneratedList(filter)
+      const survivingTasks = list.sections.flatMap(s =>
+        (s.inline_tasks ?? []).filter(t => !t.checked).map(t => t.text)
+      )
+      let newList = await createGeneratedList(filter)
       // Keep the user's custom name if they renamed the list
       if (list.title !== list.description) {
-        await patchGeneratedList(newList.id, { title: list.title })
+        newList = await patchGeneratedList(newList.id, { title: list.title })
+      }
+      for (const text of survivingTasks) {
+        newList = await patchGeneratedList(newList.id, { add_inline_task: { text, section_index: 0 } })
       }
       await deleteGeneratedList(list.id)
       const summary: GeneratedListSummary = {
