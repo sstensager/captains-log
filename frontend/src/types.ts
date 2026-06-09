@@ -142,10 +142,16 @@ export interface QueryHistoryItem {
   created_at: string
 }
 
+export interface InlineTaskItem {
+  text: string
+  checked: boolean
+}
+
 export interface GeneratedListSection {
   label: string
   description: string
   tasks: TaskOut[]
+  inline_tasks: InlineTaskItem[]
 }
 
 export interface GeneratedListOut {
@@ -155,6 +161,15 @@ export interface GeneratedListOut {
   filter_json: string
   sections: GeneratedListSection[]
   created_at: string
+}
+
+export interface GeneratedListSummary {
+  id: number
+  title: string
+  description: string | null
+  created_at: string
+  updated_at: string | null
+  task_count: number
 }
 
 export type TasksStatusFilter = 'open' | 'done'

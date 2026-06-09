@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { createGeneratedList, fetchAllTasks, patchTask } from '../../api'
+import { createGeneratedList, createLog, fetchAllTasks, patchTask, quickAddTaskToLog } from '../../api'
 import type { TaskEntityRef, TaskOut, TasksActiveFilter, TasksStatusFilter } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate } from '../../utils/time'
@@ -119,6 +119,9 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
   )
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
   const [organizing, setOrganizing] = useState(false)
+  const [addingToGroup, setAddingToGroup] = useState<string | null>(null)
+  const [addInput, setAddInput] = useState('')
+  const addInputRef = useRef<HTMLInputElement>(null)
 
   // Keep a ref so we can rebuild the snapshot without adding tasks as a dep
   const tasksRef = useRef<TaskOut[]>([])
@@ -198,6 +201,44 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
       console.error('Organize failed', e)
     } finally {
       setOrganizing(false)
+    }
+  }
+
+  const openAddInput = (groupKey: string) => {
+    setAddingToGroup(groupKey)
+    setAddInput('')
+    setTimeout(() => addInputRef.current?.focus(), 50)
+  }
+
+  const submitQuickAdd = async (groupKey: string, logId: number | null) => {
+    const text = addInput.trim()
+    if (!text) { setAddingToGroup(null); return }
+    setAddingToGroup(null)
+    setAddInput('')
+    try {
+      let newTask: TaskOut
+      if (logId) {
+        newTask = await quickAddTaskToLog(logId, text)
+      } else {
+        // Flat view / no source log: create a minimal log entry
+        await createLog('[ ] ' + text)
+        // Re-fetch to pick up the new task after async parse
+        setTimeout(() => {
+          fetchAllTasks().then(t => { tasksRef.current = t; setTasks(t); rebuild(t, statusFilter, filter) })
+        }, 1200)
+        return
+      }
+      // Optimistically insert into local state and snapshot
+      const updated = [...tasksRef.current, newTask]
+      tasksRef.current = updated
+      setTasks(updated)
+      setSnapshotGroups(prev => prev.map(g =>
+        g.key === groupKey
+          ? { ...g, sections: g.sections.map((s, i) => i === 0 ? { ...s, taskIds: [...s.taskIds, newTask.id] } : s) }
+          : g
+      ))
+    } catch (e) {
+      console.error('Quick add failed', e)
     }
   }
 
@@ -450,6 +491,36 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
           </div>
         )}
 
+        {/* Global quick-add — shown when not in grouped view or when adding globally */}
+        {(viewMode !== 'grouped' || snapshotGroups.length === 0) && statusFilter === 'open' && (
+          addingToGroup === 'global' ? (
+            <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-xl border bg-white shadow-sm max-w-2xl">
+              <div className="w-4 h-4 shrink-0 rounded border border-gray-300" />
+              <input
+                ref={addInputRef}
+                type="text"
+                value={addInput}
+                onChange={e => setAddInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') submitQuickAdd('global', null)
+                  if (e.key === 'Escape') setAddingToGroup(null)
+                }}
+                onBlur={() => submitQuickAdd('global', null)}
+                placeholder="New todo…"
+                className="flex-1 text-sm outline-none text-gray-800 placeholder-gray-400 bg-transparent"
+              />
+            </div>
+          ) : (
+            <button
+              onClick={() => openAddInput('global')}
+              className="flex items-center gap-2 mb-4 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <span className="w-5 h-5 flex items-center justify-center rounded border border-gray-300 text-base leading-none">+</span>
+              Add todo
+            </button>
+          )
+        )}
+
         {loading ? (
           <div className="text-sm text-gray-400">Loading…</div>
         ) : snapshotGroups.length === 0 ? (
@@ -569,8 +640,15 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
                         </div>
                       )}
                     </div>
-                    <div className="text-xs text-gray-400 shrink-0">
-                      {openInGroup}/{allTaskIds.length}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-gray-400">{openInGroup}/{allTaskIds.length}</span>
+                      {group.source_log_id && (
+                        <button
+                          onClick={() => openAddInput(group.key)}
+                          className="w-5 h-5 flex items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors text-base leading-none"
+                          title="Add todo to this note"
+                        >+</button>
+                      )}
                     </div>
                   </div>
 
@@ -614,6 +692,26 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
                       </div>
                     </div>
                   ))}
+
+                  {/* Quick-add inline input */}
+                  {addingToGroup === group.key ? (
+                    <div className="flex items-center gap-2 px-4 py-2.5 border-t border-gray-100">
+                      <div className="w-4 h-4 shrink-0 rounded border border-gray-300" />
+                      <input
+                        ref={addInputRef}
+                        type="text"
+                        value={addInput}
+                        onChange={e => setAddInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') submitQuickAdd(group.key, group.source_log_id)
+                          if (e.key === 'Escape') setAddingToGroup(null)
+                        }}
+                        onBlur={() => submitQuickAdd(group.key, group.source_log_id)}
+                        placeholder="New todo…"
+                        className="flex-1 text-sm outline-none text-gray-800 placeholder-gray-400 bg-transparent"
+                      />
+                    </div>
+                  ) : null}
                 </div>
               )
             })}

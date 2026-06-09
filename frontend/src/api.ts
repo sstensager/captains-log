@@ -1,4 +1,4 @@
-import type { AdminStats, EntityDetail, EntitySummary, GeneratedListOut, LogDetail, LogSummary, QueryHistoryItem, QueryResponse, TaskOut } from './types'
+import type { AdminStats, EntityDetail, EntitySummary, GeneratedListOut, GeneratedListSummary, LogDetail, LogSummary, QueryHistoryItem, QueryResponse, TaskOut } from './types'
 
 const BASE = '/api'
 
@@ -76,6 +76,9 @@ export const fetchAllTasks = (): Promise<TaskOut[]> =>
 
 export const patchTask = (id: number, status: string): Promise<TaskOut> =>
   patch(`/tasks/${id}`, { status })
+
+export const quickAddTaskToLog = (logId: number, title: string): Promise<TaskOut> =>
+  post(`/logs/${logId}/quick-task`, { title })
 
 // ── Annotations ───────────────────────────────────────────────────────────────
 
@@ -159,8 +162,22 @@ export const createGeneratedList = (
 ): Promise<GeneratedListOut> =>
   post('/generated-lists', { filter })
 
+export const fetchGeneratedLists = (): Promise<GeneratedListSummary[]> =>
+  get('/generated-lists')
+
 export const fetchGeneratedList = (id: number): Promise<GeneratedListOut> =>
   get(`/generated-lists/${id}`)
+
+export const patchGeneratedList = (
+  id: number,
+  body: {
+    title?: string
+    feedback?: string
+    add_inline_task?: string
+    toggle_inline_task?: { section_index: number; task_index: number; checked: boolean }
+  },
+): Promise<GeneratedListOut> =>
+  patch(`/generated-lists/${id}`, body)
 
 export const deleteGeneratedList = async (id: number): Promise<void> => {
   const res = await fetch(`/api/generated-lists/${id}`, { method: 'DELETE' })

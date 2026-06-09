@@ -33,6 +33,47 @@ export default function App() {
     fetchLogs().then(data => { setLogs(data); setLoading(false) })
   }, [])
 
+  // ── History API shim for swipe-back on mobile ─────────────────────────────
+  // We keep a navDepth ref (not state) to avoid re-renders.
+  // On every forward navigation we pushState; on popstate we "go back" in-app.
+  const navDepth = useRef(0)
+  const stateRef = useRef({ page, mobileView, returnPage })
+  stateRef.current = { page, mobileView, returnPage }
+
+  useEffect(() => {
+    // Seed a base history entry so the first popstate has something to land on
+    history.replaceState({ depth: 0 }, '')
+
+    const onPopstate = () => {
+      const { page: p, mobileView: mv, returnPage: rp } = stateRef.current
+      if (navDepth.current > 0) navDepth.current--
+      // Push a replacement so the depth stays consistent
+      history.replaceState({ depth: navDepth.current }, '')
+      // Decide what "back" means based on current view
+      if (p === 'logs' && mv === 'detail') {
+        if (rp) {
+          setPage(rp as Page)
+          setReturnPage(null)
+        } else {
+          setMobileView('list')
+        }
+      } else if (p !== 'logs') {
+        setPage('logs')
+        setMobileView('list')
+        setReturnPage(null)
+        setEntityToNavigate(null)
+      }
+    }
+
+    window.addEventListener('popstate', onPopstate)
+    return () => window.removeEventListener('popstate', onPopstate)
+  }, [])
+
+  const pushNav = () => {
+    navDepth.current++
+    history.pushState({ depth: navDepth.current }, '')
+  }
+
   // iOS Safari: keyboard overlays the viewport without resizing it.
   // visualViewport gives the actual visible area; we size + translate the root
   // element to match so toolbars stay above the keyboard.
@@ -54,12 +95,14 @@ export default function App() {
   }, [])
 
   const handleSelectLog = (id: number) => {
+    pushNav()
     setSelectedLogId(id)
     setComposing(false)
     setMobileView('detail')
   }
 
   const handleNewLog = () => {
+    pushNav()
     setComposing(true)
     setSelectedLogId(null)
     setMobileView('detail')
@@ -174,7 +217,7 @@ export default function App() {
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => { setPage(key); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null); setListsInitialId(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
+            onClick={() => { pushNav(); setPage(key); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null); setListsInitialId(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
             className={`text-sm px-3 py-1 rounded transition-colors ${
               page === key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
             }`}
@@ -256,7 +299,7 @@ export default function App() {
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => { setPage(key); setMobileView('list'); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
+            onClick={() => { pushNav(); setPage(key); setMobileView('list'); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
             className={`flex-1 py-3 text-xs font-medium transition-colors ${
               page === key ? 'text-gray-900' : 'text-gray-400'
             }`}

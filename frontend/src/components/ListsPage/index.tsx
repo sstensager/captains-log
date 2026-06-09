@@ -8,7 +8,7 @@ import {
   patchGeneratedList,
   patchTask,
 } from '../../api'
-import type { GeneratedListOut, GeneratedListSummary, TaskOut } from '../../types'
+import type { GeneratedListOut, GeneratedListSummary, InlineTaskItem, TaskOut } from '../../types'
 import { relativeDate } from '../../utils/time'
 
 // ── Inline-editable title ─────────────────────────────────────────────────────
@@ -76,6 +76,9 @@ function ListDetail({
   const [refining, setRefining] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showAddInput, setShowAddInput] = useState(false)
+  const [addInput, setAddInput] = useState('')
+  const addInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -144,6 +147,23 @@ function ListDetail({
     } finally {
       setDeleting(false)
     }
+  }
+
+  const submitAddInline = async () => {
+    const text = addInput.trim()
+    setShowAddInput(false)
+    setAddInput('')
+    if (!text || !list) return
+    const updated = await patchGeneratedList(list.id, { add_inline_task: text })
+    setList(updated)
+  }
+
+  const handleToggleInline = async (sectionIndex: number, taskIndex: number, item: InlineTaskItem) => {
+    if (!list) return
+    const updated = await patchGeneratedList(list.id, {
+      toggle_inline_task: { section_index: sectionIndex, task_index: taskIndex, checked: !item.checked },
+    })
+    setList(updated)
   }
 
   if (loading) {
@@ -230,9 +250,55 @@ function ListDetail({
                   </div>
                 )
               })}
+              {(section.inline_tasks ?? []).map((item, ti) => (
+                <div
+                  key={`inline-${ti}`}
+                  onClick={() => handleToggleInline(si, ti, item)}
+                  className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer active:bg-gray-50 transition-opacity ${item.checked ? 'opacity-50' : ''}`}
+                >
+                  <div
+                    className={`w-4 h-4 shrink-0 rounded border text-xs flex items-center justify-center transition-colors ${
+                      item.checked ? 'bg-gray-900 border-gray-900 text-white' : 'border-gray-400'
+                    }`}
+                  >
+                    {item.checked && '✓'}
+                  </div>
+                  <span className={`text-sm flex-1 min-w-0 break-words ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                    {item.text}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         ))}
+
+        {/* Quick-add inline todo */}
+        {showAddInput ? (
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border bg-white shadow-sm">
+            <div className="w-4 h-4 shrink-0 rounded border border-gray-300" />
+            <input
+              ref={addInputRef}
+              type="text"
+              value={addInput}
+              onChange={e => setAddInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') submitAddInline()
+                if (e.key === 'Escape') { setShowAddInput(false); setAddInput('') }
+              }}
+              onBlur={submitAddInline}
+              placeholder="New todo…"
+              className="flex-1 text-sm outline-none text-gray-800 placeholder-gray-400 bg-transparent"
+            />
+          </div>
+        ) : (
+          <button
+            onClick={() => { setShowAddInput(true); setTimeout(() => addInputRef.current?.focus(), 50) }}
+            className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <span className="w-5 h-5 flex items-center justify-center rounded border border-gray-300 text-base leading-none">+</span>
+            Add todo
+          </button>
+        )}
 
         {/* Feedback area */}
         <div className="rounded-xl border bg-white shadow-sm p-4 space-y-2">
