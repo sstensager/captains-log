@@ -173,7 +173,7 @@ export const patchGeneratedList = (
   body: {
     title?: string
     feedback?: string
-    add_inline_task?: string
+    add_inline_task?: { text: string; section_index: number }
     toggle_inline_task?: { section_index: number; task_index: number; checked: boolean }
   },
 ): Promise<GeneratedListOut> =>

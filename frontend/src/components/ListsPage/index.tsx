@@ -76,7 +76,7 @@ function ListDetail({
   const [refining, setRefining] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [showAddInput, setShowAddInput] = useState(false)
+  const [addingToSection, setAddingToSection] = useState<number | null>(null)
   const [addInput, setAddInput] = useState('')
   const addInputRef = useRef<HTMLInputElement>(null)
   const addSubmittingRef = useRef(false)
@@ -152,16 +152,16 @@ function ListDetail({
     }
   }
 
-  const submitAddInline = async () => {
+  const submitAddInline = async (sectionIndex: number) => {
     if (addSubmittingRef.current) return
     addSubmittingRef.current = true
     const text = addInputValueRef.current.trim()
-    setShowAddInput(false)
+    setAddingToSection(null)
     setAddInput('')
     addInputValueRef.current = ''
     if (!text || !list) { addSubmittingRef.current = false; return }
     try {
-      const updated = await patchGeneratedList(list.id, { add_inline_task: text })
+      const updated = await patchGeneratedList(list.id, { add_inline_task: { text, section_index: sectionIndex } })
       setList(updated)
     } catch (e) {
       console.error('Add inline task failed', e)
@@ -280,38 +280,37 @@ function ListDetail({
                   </span>
                 </div>
               ))}
+              {/* Per-section quick-add */}
+              {addingToSection === si ? (
+                <div className="flex items-center gap-3 px-4 py-2.5">
+                  <div className="w-4 h-4 shrink-0 rounded border border-gray-300" />
+                  <input
+                    ref={addInputRef}
+                    autoFocus
+                    type="text"
+                    value={addInput}
+                    onChange={e => { setAddInput(e.target.value); addInputValueRef.current = e.target.value }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); submitAddInline(si) }
+                      if (e.key === 'Escape') { addInputValueRef.current = ''; setAddingToSection(null); setAddInput('') }
+                    }}
+                    onBlur={() => submitAddInline(si)}
+                    placeholder="New todo…"
+                    className="flex-1 text-sm outline-none text-gray-800 placeholder-gray-400 bg-transparent"
+                  />
+                </div>
+              ) : (
+                <button
+                  onClick={() => { addInputValueRef.current = ''; setAddInput(''); setAddingToSection(si) }}
+                  className="flex items-center gap-3 px-4 py-2.5 w-full text-left text-sm text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  <span className="w-4 h-4 shrink-0 flex items-center justify-center rounded border border-gray-200 text-xs leading-none">+</span>
+                  Add todo
+                </button>
+              )}
             </div>
           </div>
         ))}
-
-        {/* Quick-add inline todo */}
-        {showAddInput ? (
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border bg-white shadow-sm">
-            <div className="w-4 h-4 shrink-0 rounded border border-gray-300" />
-            <input
-              ref={addInputRef}
-              autoFocus
-              type="text"
-              value={addInput}
-              onChange={e => { setAddInput(e.target.value); addInputValueRef.current = e.target.value }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') { e.preventDefault(); submitAddInline() }
-                if (e.key === 'Escape') { addInputValueRef.current = ''; setShowAddInput(false); setAddInput('') }
-              }}
-              onBlur={submitAddInline}
-              placeholder="New todo…"
-              className="flex-1 text-sm outline-none text-gray-800 placeholder-gray-400 bg-transparent"
-            />
-          </div>
-        ) : (
-          <button
-            onClick={() => { addInputValueRef.current = ''; setAddInput(''); setShowAddInput(true) }}
-            className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <span className="w-5 h-5 flex items-center justify-center rounded border border-gray-300 text-base leading-none">+</span>
-            Add todo
-          </button>
-        )}
 
         {/* Feedback area */}
         <div className="rounded-xl border bg-white shadow-sm p-4 space-y-2">

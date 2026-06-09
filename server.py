@@ -193,7 +193,7 @@ class GeneratedListSummary(BaseModel):
 class GeneratedListPatch(BaseModel):
     title: Optional[str] = None
     feedback: Optional[str] = None
-    add_inline_task: Optional[str] = None       # text of new inline todo; added to first section
+    add_inline_task: Optional[dict] = None       # {text, section_index}; added to that section
     toggle_inline_task: Optional[dict] = None   # {section_index, task_index, checked}
 
 
@@ -609,8 +609,10 @@ def patch_generated_list(list_id: int, body: GeneratedListPatch):
     if body.add_inline_task is not None:
         if not sections_data:
             sections_data = [{"label": "Tasks", "description": "", "task_ids": [], "inline_tasks": []}]
-        first = sections_data[0]
-        first.setdefault("inline_tasks", []).append({"text": body.add_inline_task, "checked": False})
+        task_text = body.add_inline_task.get("text", "").strip()
+        target_si = int(body.add_inline_task.get("section_index", 0))
+        if task_text and 0 <= target_si < len(sections_data):
+            sections_data[target_si].setdefault("inline_tasks", []).append({"text": task_text, "checked": False})
 
     elif body.toggle_inline_task is not None:
         t = body.toggle_inline_task
