@@ -47,14 +47,14 @@ export default function App() {
   stateRef.current = { page, mobileView, selectedLogId, entityToNavigate }
 
   const restoreFromStack = () => {
-    navStackRef.current.pop()
+    const prev = navStackRef.current.pop()
     const newTop = navStackRef.current[navStackRef.current.length - 1] ?? null
     setPrevSnapshot(newTop)
-    if (newTop) {
-      setPage(newTop.page)
-      setMobileView(newTop.mobileView)
-      setSelectedLogId(newTop.selectedLogId)
-      setEntityToNavigate(newTop.entityToNavigate)
+    if (prev) {
+      setPage(prev.page)
+      setMobileView(prev.mobileView)
+      setSelectedLogId(prev.selectedLogId)
+      setEntityToNavigate(prev.entityToNavigate)
     } else {
       setPage('logs')
       setMobileView('list')
