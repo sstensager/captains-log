@@ -491,36 +491,6 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
           </div>
         )}
 
-        {/* Global quick-add — shown when not in grouped view or when adding globally */}
-        {(viewMode !== 'grouped' || snapshotGroups.length === 0) && statusFilter === 'open' && (
-          addingToGroup === 'global' ? (
-            <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-xl border bg-white shadow-sm max-w-2xl">
-              <div className="w-4 h-4 shrink-0 rounded border border-gray-300" />
-              <input
-                ref={addInputRef}
-                type="text"
-                value={addInput}
-                onChange={e => setAddInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') submitQuickAdd('global', null)
-                  if (e.key === 'Escape') setAddingToGroup(null)
-                }}
-                onBlur={() => submitQuickAdd('global', null)}
-                placeholder="New todo…"
-                className="flex-1 text-sm outline-none text-gray-800 placeholder-gray-400 bg-transparent"
-              />
-            </div>
-          ) : (
-            <button
-              onClick={() => openAddInput('global')}
-              className="flex items-center gap-2 mb-4 text-sm text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <span className="w-5 h-5 flex items-center justify-center rounded border border-gray-300 text-base leading-none">+</span>
-              Add todo
-            </button>
-          )
-        )}
-
         {loading ? (
           <div className="text-sm text-gray-400">Loading…</div>
         ) : snapshotGroups.length === 0 ? (
@@ -599,6 +569,37 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
                 })
               )}
             </div>
+            {/* Quick-add at bottom of flat card */}
+            {statusFilter === 'open' && (() => {
+              const targetGroup = snapshotGroups.find(g => g.source_log_id)
+              if (!targetGroup) return null
+              return addingToGroup === `flat-${targetGroup.key}` ? (
+                <div className="flex items-center gap-3 px-4 py-2.5 border-t border-gray-100">
+                  <div className="w-4 h-4 shrink-0 rounded border border-gray-300" />
+                  <input
+                    ref={addInputRef}
+                    type="text"
+                    value={addInput}
+                    onChange={e => setAddInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') submitQuickAdd(targetGroup.key, targetGroup.source_log_id)
+                      if (e.key === 'Escape') setAddingToGroup(null)
+                    }}
+                    onBlur={() => submitQuickAdd(targetGroup.key, targetGroup.source_log_id)}
+                    placeholder="New todo…"
+                    className="flex-1 text-sm outline-none text-gray-800 placeholder-gray-400 bg-transparent"
+                  />
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setAddingToGroup(`flat-${targetGroup.key}`); setAddInput(''); setTimeout(() => addInputRef.current?.focus(), 50) }}
+                  className="flex items-center gap-3 w-full px-4 py-2.5 border-t border-gray-50 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors text-sm"
+                >
+                  <div className="w-4 h-4 shrink-0 rounded border border-gray-200 flex items-center justify-center text-base leading-none">+</div>
+                  <span>Add todo</span>
+                </button>
+              )
+            })()}
           </div>
         ) : (
           // ── Grouped by log ───────────────────────────────────────────────────
