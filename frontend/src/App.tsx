@@ -170,6 +170,15 @@ export default function App() {
     setListsInitialId(listId)
   }
 
+  const handleSelectLogFromLists = (id: number) => {
+    setPage('logs')
+    setSelectedLogId(id)
+    setEntityToNavigate(null)
+    setReturnLogId(null)
+    setReturnPage('lists')
+    setMobileView('detail')
+  }
+
   const handleSelectLogFromAsk = (id: number) => {
     setPage('logs')
     setSelectedLogId(id)
@@ -288,7 +297,7 @@ export default function App() {
             onListCreated={handleListCreated}
           />
         ) : page === 'lists' ? (
-          <ListsPage initialSelectedId={listsInitialId} />
+          <ListsPage initialSelectedId={listsInitialId} onSelectLog={handleSelectLogFromLists} />
         ) : (
           <AskPage onSelectLog={handleSelectLogFromAsk} />
         )}

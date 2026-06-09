@@ -64,10 +64,12 @@ function ListDetail({
   listId,
   onDeleted,
   onRegenerated,
+  onSelectLog,
 }: {
   listId: number
   onDeleted: () => void
   onRegenerated: (newList: GeneratedListSummary) => void
+  onSelectLog?: (id: number) => void
 }) {
   const [list, setList] = useState<GeneratedListOut | null>(null)
   const [tasks, setTasks] = useState<TaskOut[]>([])
@@ -265,6 +267,20 @@ function ListDetail({
                     <span className={`text-sm flex-1 min-w-0 break-words ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                       {live.title}
                     </span>
+                    {live.source_log_id != null && (
+                      <button
+                        onClick={e => { e.stopPropagation(); onSelectLog?.(live.source_log_id!) }}
+                        title="View source log"
+                        className="shrink-0 text-gray-300 hover:text-gray-500 transition-colors"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="1" width="12" height="14" rx="1.5"/>
+                          <line x1="5" y1="5" x2="11" y2="5"/>
+                          <line x1="5" y1="8" x2="11" y2="8"/>
+                          <line x1="5" y1="11" x2="8" y2="11"/>
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 )
               })}
@@ -283,6 +299,12 @@ function ListDetail({
                   </div>
                   <span className={`text-sm flex-1 min-w-0 break-words ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                     {item.text}
+                  </span>
+                  <span className="shrink-0 text-gray-300" title="Added to list">
+                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <line x1="8" y1="2" x2="8" y2="14"/>
+                      <line x1="2" y1="8" x2="14" y2="8"/>
+                    </svg>
                   </span>
                 </div>
               ))}
@@ -418,7 +440,7 @@ function ListsRail({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function ListsPage({ initialSelectedId }: { initialSelectedId?: number | null }) {
+export default function ListsPage({ initialSelectedId, onSelectLog }: { initialSelectedId?: number | null; onSelectLog?: (id: number) => void }) {
   const [lists, setLists] = useState<GeneratedListSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -485,6 +507,7 @@ export default function ListsPage({ initialSelectedId }: { initialSelectedId?: n
               listId={selectedId!}
               onDeleted={() => handleDeleted(selectedId!)}
               onRegenerated={handleRegenerated}
+              onSelectLog={onSelectLog}
             />
           </>
         ) : (
