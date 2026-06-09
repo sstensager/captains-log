@@ -300,12 +300,6 @@ function ListDetail({
                   <span className={`text-sm flex-1 min-w-0 break-words ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                     {item.text}
                   </span>
-                  <span className="shrink-0 text-gray-300" title="Added to list">
-                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                      <line x1="8" y1="2" x2="8" y2="14"/>
-                      <line x1="2" y1="8" x2="14" y2="8"/>
-                    </svg>
-                  </span>
                 </div>
               ))}
               {/* Per-section quick-add */}
