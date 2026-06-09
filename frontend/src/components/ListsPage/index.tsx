@@ -302,6 +302,7 @@ function ListDetail({
                     }}
                     onBlur={() => submitAddInline(si)}
                     placeholder="New todo…"
+                    enterKeyHint="done"
                     className="flex-1 text-sm outline-none text-gray-800 placeholder-gray-400 bg-transparent"
                   />
                 </div>

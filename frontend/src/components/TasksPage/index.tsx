@@ -587,6 +587,7 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
                     }}
                     onBlur={() => submitQuickAdd(targetGroup.key, targetGroup.source_log_id)}
                     placeholder="New todo…"
+                    enterKeyHint="done"
                     className="flex-1 text-sm outline-none text-gray-800 placeholder-gray-400 bg-transparent"
                   />
                 </div>
