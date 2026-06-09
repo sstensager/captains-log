@@ -175,6 +175,7 @@ def _run_migrations(con: sqlite3.Connection) -> None:
         "ALTER TABLE Log ADD COLUMN latitude REAL",
         "ALTER TABLE Log ADD COLUMN longitude REAL",
         "ALTER TABLE Entity ADD COLUMN places_enriched_at TEXT",
+        "ALTER TABLE GeneratedList ADD COLUMN updated_at TEXT",
     ]
     for sql in migrations:
         try:

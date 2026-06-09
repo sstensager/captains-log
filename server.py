@@ -156,10 +156,16 @@ class TaskPatch(BaseModel):
     status: str
 
 
+class InlineTaskItem(BaseModel):
+    text: str
+    checked: bool = False
+
+
 class GeneratedListSectionOut(BaseModel):
     label: str
     description: str
     tasks: list[TaskOut]
+    inline_tasks: list[InlineTaskItem] = []
 
 
 class GeneratedListOut(BaseModel):
@@ -173,6 +179,26 @@ class GeneratedListOut(BaseModel):
 
 class GeneratedListCreate(BaseModel):
     filter: dict  # {"kind": "entity"|"tag", "value": "..."}
+
+
+class GeneratedListSummary(BaseModel):
+    id: int
+    title: str
+    description: Optional[str]
+    created_at: str
+    updated_at: Optional[str]
+    task_count: int
+
+
+class GeneratedListPatch(BaseModel):
+    title: Optional[str] = None
+    feedback: Optional[str] = None
+    add_inline_task: Optional[str] = None       # text of new inline todo; added to first section
+    toggle_inline_task: Optional[dict] = None   # {section_index, task_index, checked}
+
+
+class QuickTaskBody(BaseModel):
+    title: str
 
 
 class EntityPatch(BaseModel):
@@ -530,6 +556,7 @@ def get_generated_list(list_id: int):
             label=s["label"],
             description=s["description"],
             tasks=[task_map[tid] for tid in s["task_ids"] if tid in task_map],
+            inline_tasks=[InlineTaskItem(**it) for it in s.get("inline_tasks", [])],
         )
         for s in sections_data
     ]
@@ -544,6 +571,105 @@ def delete_generated_list(list_id: int):
     con = _get_con()
     con.execute("DELETE FROM GeneratedList WHERE id = ?", (list_id,))
     con.commit()
+
+
+@app.get("/api/generated-lists", response_model=list[GeneratedListSummary])
+def list_generated_lists():
+    import json as _json
+    con = _get_con()
+    rows = con.execute(
+        "SELECT id, title, description, sections_json, created_at, updated_at FROM GeneratedList ORDER BY COALESCE(updated_at, created_at) DESC"
+    ).fetchall()
+    result = []
+    for gl_id, title, description, sections_json, created_at, updated_at in rows:
+        sections_data = _json.loads(sections_json)
+        task_count = sum(len(s.get("task_ids", [])) for s in sections_data)
+        result.append(GeneratedListSummary(
+            id=gl_id, title=title, description=description,
+            created_at=created_at, updated_at=updated_at, task_count=task_count,
+        ))
+    return result
+
+
+@app.patch("/api/generated-lists/{list_id}", response_model=GeneratedListOut)
+def patch_generated_list(list_id: int, body: GeneratedListPatch):
+    import json as _json
+    con = _get_con()
+    row = con.execute(
+        "SELECT id, title, description, filter_json, sections_json, created_at FROM GeneratedList WHERE id = ?",
+        (list_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="List not found")
+
+    gl_id, title, description, filter_json, sections_json, created_at = row
+    new_title = body.title if body.title is not None else title
+    sections_data = _json.loads(sections_json)
+
+    if body.add_inline_task is not None:
+        if not sections_data:
+            sections_data = [{"label": "Tasks", "description": "", "task_ids": [], "inline_tasks": []}]
+        first = sections_data[0]
+        first.setdefault("inline_tasks", []).append({"text": body.add_inline_task, "checked": False})
+
+    elif body.toggle_inline_task is not None:
+        t = body.toggle_inline_task
+        si, ti = int(t.get("section_index", 0)), int(t.get("task_index", 0))
+        if 0 <= si < len(sections_data):
+            items = sections_data[si].setdefault("inline_tasks", [])
+            if 0 <= ti < len(items):
+                items[ti]["checked"] = bool(t.get("checked", False))
+
+    elif body.feedback:
+        from openai import OpenAI
+        from organize import refine_list, OrgSection
+        import json as _json2
+
+        # Collect unchecked inline tasks so reorg can't lose them
+        surviving_inline = [
+            it for s in sections_data for it in s.get("inline_tasks", []) if not it["checked"]
+        ]
+
+        all_task_ids = [tid for s in sections_data for tid in s["task_ids"]]
+
+        if all_task_ids:
+            ph = ",".join("?" * len(all_task_ids))
+            task_rows = con.execute(
+                f"SELECT id, title FROM Task WHERE id IN ({ph})", all_task_ids
+            ).fetchall()
+            task_dicts = [{"id": r[0], "title": r[1]} for r in task_rows]
+        else:
+            task_dicts = []
+
+        client = OpenAI()
+        result = refine_list(client, sections_data, task_dicts, body.feedback)
+
+        # Guard against LLM dropping tasks
+        assigned_ids = {tid for sec in result.sections for tid in sec.task_ids}
+        missing_ids = [t["id"] for t in task_dicts if t["id"] not in assigned_ids]
+        if missing_ids:
+            result.sections.append(
+                OrgSection(label="Other", description="Remaining items.", task_ids=missing_ids)
+            )
+
+        sections_data = [
+            {"label": s.label, "description": s.description, "task_ids": s.task_ids, "inline_tasks": []}
+            for s in result.sections
+        ]
+        # Re-attach unchecked inline tasks to the first section
+        if surviving_inline and sections_data:
+            sections_data[0]["inline_tasks"] = surviving_inline
+
+    new_sections_json = _json.dumps(sections_data)
+
+    con.execute(
+        "UPDATE GeneratedList SET title = ?, sections_json = ?, updated_at = datetime('now') WHERE id = ?",
+        (new_title, new_sections_json, list_id),
+    )
+    con.commit()
+
+    # Return full list
+    return get_generated_list(list_id)
 
 
 @app.get("/api/logs/{log_id}", response_model=LogDetail)
@@ -914,6 +1040,27 @@ def patch_task(task_id: int, body: TaskPatch):
         "SELECT id, title, status, source_log_id FROM Task WHERE id = ?", (task_id,)
     ).fetchone()
     return TaskOut(id=row[0], title=row[1], status=row[2], source_log_id=row[3])
+
+
+@app.post("/api/logs/{log_id}/quick-task", response_model=TaskOut, status_code=201)
+def quick_add_task_to_log(log_id: int, body: QuickTaskBody):
+    """Append a [ ] item to the log's raw text and insert a Task row directly (no LLM parse)."""
+    con = _get_con()
+    row = con.execute("SELECT raw_text FROM Log WHERE id = ?", (log_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Log not found")
+    new_raw = row[0].rstrip() + "\n[ ] " + body.title.strip()
+    con.execute(
+        "UPDATE Log SET raw_text = ?, updated_at = datetime('now') WHERE id = ?",
+        (new_raw, log_id),
+    )
+    cur = con.execute(
+        "INSERT INTO Task (title, status, source_log_id) VALUES (?, 'todo', ?)",
+        (body.title.strip(), log_id),
+    )
+    con.commit()
+    task_id = cur.lastrowid
+    return TaskOut(id=task_id, title=body.title.strip(), status="todo", source_log_id=log_id)
 
 
 # ── Annotation endpoints ──────────────────────────────────────────────────────

@@ -88,6 +88,56 @@ def organize_tasks(
     return response.choices[0].message.parsed
 
 
+_REFINE_SYSTEM = """\
+You previously organized a personal task list into sections. The user has feedback \
+about the organization. Apply their feedback and return a revised grouping.
+
+Rules:
+- Every task_id in the input MUST appear in exactly one section. Do not drop any.
+- You may rename sections, merge sections, move tasks between sections, or split sections.
+- Keep the same title unless the user's feedback clearly calls for a new one.
+- 2–6 sections is ideal. Don't over-fragment.
+"""
+
+
+def refine_list(
+    client: OpenAI,
+    current_sections: list[dict],
+    task_dicts: list[dict],
+    feedback: str,
+) -> OrgResult:
+    """
+    current_sections: list of {label, description, task_ids} with task titles already resolved.
+    task_dicts: list of {id, title} for all tasks in the list.
+    feedback: user's natural-language refinement instruction.
+    """
+    task_by_id = {t["id"]: t["title"] for t in task_dicts}
+
+    sections_text = ""
+    for s in current_sections:
+        sections_text += f"\n## {s['label']}\n{s.get('description', '')}\n"
+        for tid in s["task_ids"]:
+            sections_text += f"  [ID {tid}] {task_by_id.get(tid, '(unknown)')}\n"
+
+    user_content = (
+        f"Current organization:{sections_text}\n"
+        f"User feedback: {feedback}\n\n"
+        f"All task IDs that must appear: {[t['id'] for t in task_dicts]}"
+    )
+
+    response = client.beta.chat.completions.parse(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": _REFINE_SYSTEM},
+            {"role": "user", "content": user_content},
+        ],
+        response_format=OrgResult,
+        temperature=0.3,
+    )
+
+    return response.choices[0].message.parsed
+
+
 def _task_age(created_at: str) -> str:
     """Return a human-readable age string like '3 wk ago' or '2 mo ago'."""
     try:

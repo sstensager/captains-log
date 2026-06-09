@@ -106,7 +106,8 @@ def annotate_log(
         )
         context_lines.append(
             "Known entities — if ANY of these appear in the note (even abbreviated, "
-            "nicknamed, or referred to informally), you MUST include them as a mention. "
+            "nicknamed, referred to informally, or written without apostrophes/punctuation — "
+            "e.g. 'Ralphs' for 'Ralph\\'s', 'dads' for 'Dad\\'s'), you MUST include them as a mention. "
             "Do not skip a known entity just because you wouldn't spontaneously tag it:\n"
             + grouped
         )
