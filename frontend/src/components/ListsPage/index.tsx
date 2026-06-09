@@ -79,6 +79,9 @@ function ListDetail({
   const [showAddInput, setShowAddInput] = useState(false)
   const [addInput, setAddInput] = useState('')
   const addInputRef = useRef<HTMLInputElement>(null)
+  const addSubmittingRef = useRef(false)
+  // Mirror addInput in a ref so the async callback always reads the latest value
+  const addInputValueRef = useRef('')
 
   useEffect(() => {
     setLoading(true)
@@ -150,12 +153,21 @@ function ListDetail({
   }
 
   const submitAddInline = async () => {
-    const text = addInput.trim()
+    if (addSubmittingRef.current) return
+    addSubmittingRef.current = true
+    const text = addInputValueRef.current.trim()
     setShowAddInput(false)
     setAddInput('')
-    if (!text || !list) return
-    const updated = await patchGeneratedList(list.id, { add_inline_task: text })
-    setList(updated)
+    addInputValueRef.current = ''
+    if (!text || !list) { addSubmittingRef.current = false; return }
+    try {
+      const updated = await patchGeneratedList(list.id, { add_inline_task: text })
+      setList(updated)
+    } catch (e) {
+      console.error('Add inline task failed', e)
+    } finally {
+      addSubmittingRef.current = false
+    }
   }
 
   const handleToggleInline = async (sectionIndex: number, taskIndex: number, item: InlineTaskItem) => {
@@ -278,12 +290,13 @@ function ListDetail({
             <div className="w-4 h-4 shrink-0 rounded border border-gray-300" />
             <input
               ref={addInputRef}
+              autoFocus
               type="text"
               value={addInput}
-              onChange={e => setAddInput(e.target.value)}
+              onChange={e => { setAddInput(e.target.value); addInputValueRef.current = e.target.value }}
               onKeyDown={e => {
-                if (e.key === 'Enter') submitAddInline()
-                if (e.key === 'Escape') { setShowAddInput(false); setAddInput('') }
+                if (e.key === 'Enter') { e.preventDefault(); submitAddInline() }
+                if (e.key === 'Escape') { addInputValueRef.current = ''; setShowAddInput(false); setAddInput('') }
               }}
               onBlur={submitAddInline}
               placeholder="New todo…"
@@ -292,7 +305,7 @@ function ListDetail({
           </div>
         ) : (
           <button
-            onClick={() => { setShowAddInput(true); setTimeout(() => addInputRef.current?.focus(), 50) }}
+            onClick={() => { addInputValueRef.current = ''; setAddInput(''); setShowAddInput(true) }}
             className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
           >
             <span className="w-5 h-5 flex items-center justify-center rounded border border-gray-300 text-base leading-none">+</span>
