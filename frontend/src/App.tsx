@@ -10,6 +10,12 @@ import { fetchLogs } from './api'
 
 type Page = 'logs' | 'entities' | 'tasks' | 'lists' | 'ask'
 type MobileView = 'list' | 'detail'
+type NavSnapshot = {
+  page: Page
+  mobileView: MobileView
+  selectedLogId: number | null
+  entityToNavigate: string | null
+}
 
 export default function App() {
   const appRef = useRef<HTMLDivElement>(null)
@@ -19,8 +25,6 @@ export default function App() {
   const [selectedLogId, setSelectedLogId] = useState<number | null>(null)
   const [composing, setComposing] = useState(false)
   const [entityToNavigate, setEntityToNavigate] = useState<string | null>(null)
-  const [returnLogId, setReturnLogId] = useState<number | null>(null)
-  const [returnPage, setReturnPage] = useState<Page | null>(null)
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const [mobileView, setMobileView] = useState<MobileView>('list')
   const [editing, setEditing] = useState(false)
@@ -34,35 +38,40 @@ export default function App() {
   }, [])
 
   // ── History API shim for swipe-back on mobile ─────────────────────────────
-  // We keep a navDepth ref (not state) to avoid re-renders.
-  // On every forward navigation we pushState; on popstate we "go back" in-app.
+  // navDepth counts pushState calls; navStackRef stores full state snapshots so
+  // each swipe-back can restore the exact prior view (unlimited depth).
   const navDepth = useRef(0)
-  const stateRef = useRef({ page, mobileView, returnPage })
-  stateRef.current = { page, mobileView, returnPage }
+  const navStackRef = useRef<NavSnapshot[]>([])
+  const [prevSnapshot, setPrevSnapshot] = useState<NavSnapshot | null>(null)
+  const stateRef = useRef({ page, mobileView, selectedLogId, entityToNavigate })
+  stateRef.current = { page, mobileView, selectedLogId, entityToNavigate }
+
+  const restoreFromStack = () => {
+    navStackRef.current.pop()
+    const newTop = navStackRef.current[navStackRef.current.length - 1] ?? null
+    setPrevSnapshot(newTop)
+    if (newTop) {
+      setPage(newTop.page)
+      setMobileView(newTop.mobileView)
+      setSelectedLogId(newTop.selectedLogId)
+      setEntityToNavigate(newTop.entityToNavigate)
+    } else {
+      setPage('logs')
+      setMobileView('list')
+      setEntityToNavigate(null)
+    }
+    setComposing(false)
+    setPendingEdit(false)
+  }
 
   useEffect(() => {
     // Seed a base history entry so the first popstate has something to land on
     history.replaceState({ depth: 0 }, '')
 
     const onPopstate = () => {
-      const { page: p, mobileView: mv, returnPage: rp } = stateRef.current
       if (navDepth.current > 0) navDepth.current--
-      // Push a replacement so the depth stays consistent
       history.replaceState({ depth: navDepth.current }, '')
-      // Decide what "back" means based on current view
-      if (p === 'logs' && mv === 'detail') {
-        if (rp) {
-          setPage(rp as Page)
-          setReturnPage(null)
-        } else {
-          setMobileView('list')
-        }
-      } else if (p !== 'logs') {
-        setPage('logs')
-        setMobileView('list')
-        setReturnPage(null)
-        setEntityToNavigate(null)
-      }
+      restoreFromStack()
     }
 
     window.addEventListener('popstate', onPopstate)
@@ -70,6 +79,14 @@ export default function App() {
   }, [])
 
   const pushNav = () => {
+    const snap: NavSnapshot = {
+      page: stateRef.current.page,
+      mobileView: stateRef.current.mobileView,
+      selectedLogId: stateRef.current.selectedLogId,
+      entityToNavigate: stateRef.current.entityToNavigate,
+    }
+    navStackRef.current.push(snap)
+    setPrevSnapshot(snap)
     navDepth.current++
     history.pushState({ depth: navDepth.current }, '')
   }
@@ -142,26 +159,24 @@ export default function App() {
   }
 
   const handleEntityClick = (name: string) => {
-    setReturnLogId(selectedLogId)
+    pushNav()
     setEntityToNavigate(name)
     setPage('entities')
   }
 
   const handleSelectLogFromEntity = (id: number, entityName?: string) => {
+    pushNav()
     setPage('logs')
     setSelectedLogId(id)
     setEntityToNavigate(entityName ?? null)
-    setReturnLogId(null)
-    setReturnPage('entities')
     setMobileView('detail')
   }
 
   const handleSelectLogFromTasks = (id: number) => {
+    pushNav()
     setPage('logs')
     setSelectedLogId(id)
     setEntityToNavigate(null)
-    setReturnLogId(null)
-    setReturnPage('tasks')
     setMobileView('detail')
   }
 
@@ -171,38 +186,34 @@ export default function App() {
   }
 
   const handleSelectLogFromLists = (id: number) => {
+    pushNav()
     setPage('logs')
     setSelectedLogId(id)
     setEntityToNavigate(null)
-    setReturnLogId(null)
-    setReturnPage('lists')
     setMobileView('detail')
   }
 
   const handleSelectLogFromAsk = (id: number) => {
+    pushNav()
     setPage('logs')
     setSelectedLogId(id)
     setEntityToNavigate(null)
-    setReturnLogId(null)
-    setReturnPage('ask')
     setMobileView('detail')
   }
 
   const handleEditLogFromTasks = (id: number) => {
+    pushNav()
     setPage('logs')
     setSelectedLogId(id)
     setEntityToNavigate(null)
-    setReturnLogId(null)
-    setReturnPage('tasks')
     setMobileView('detail')
     setPendingEdit(true)
   }
 
   const handleBackFromEntity = () => {
-    setPage('logs')
-    setMobileView('detail')
-    setEntityToNavigate(null)
-    setReturnLogId(null)
+    if (navDepth.current > 0) navDepth.current--
+    history.replaceState({ depth: navDepth.current }, '')
+    restoreFromStack()
   }
 
   const handleTagClick = (tag: string | null) => {
@@ -226,7 +237,7 @@ export default function App() {
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => { pushNav(); setPage(key); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null); setListsInitialId(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
+            onClick={() => { pushNav(); setPage(key); setEntityToNavigate(null); setListsInitialId(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
             className={`text-sm px-3 py-1 rounded transition-colors ${
               page === key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
             }`}
@@ -268,13 +279,11 @@ export default function App() {
                 onEntityClick={handleEntityClick}
                 onTagClick={handleTagClick}
                 onBack={() => {
-                  if (returnPage) {
-                    setPage(returnPage)
-                    setReturnPage(null)
-                  }
-                  setMobileView('list')
+                  if (navDepth.current > 0) navDepth.current--
+                  history.replaceState({ depth: navDepth.current }, '')
+                  restoreFromStack()
                 }}
-                crossPageBack={returnPage !== null}
+                crossPageBack={prevSnapshot !== null && prevSnapshot.page !== 'logs'}
                 onEditingChange={setEditing}
                 autoEdit={pendingEdit}
                 onAutoEditConsumed={() => setPendingEdit(false)}
@@ -285,7 +294,7 @@ export default function App() {
           <EntitiesPage
             onSelectLog={handleSelectLogFromEntity}
             initialEntity={entityToNavigate ?? undefined}
-            onBack={returnLogId !== null ? handleBackFromEntity : undefined}
+            onBack={prevSnapshot?.page === 'logs' ? handleBackFromEntity : undefined}
           />
         ) : page === 'tasks' ? (
           <TasksPage
@@ -308,7 +317,7 @@ export default function App() {
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => { pushNav(); setPage(key); setMobileView('list'); setEntityToNavigate(null); setReturnLogId(null); setReturnPage(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
+            onClick={() => { pushNav(); setPage(key); setMobileView('list'); setEntityToNavigate(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
             className={`flex-1 py-3 text-xs font-medium transition-colors ${
               page === key ? 'text-gray-900' : 'text-gray-400'
             }`}
