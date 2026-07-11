@@ -301,14 +301,11 @@ def extract_links(
         ).fetchone():
             continue
 
-        row = con.execute(
-            "SELECT id, entity_type FROM Entity "
-            "WHERE LOWER(canonical_name) = LOWER(?) AND merged_into_id IS NULL AND status != 'archived'",
-            (name,),
-        ).fetchone()
-
-        if row:
-            entity_id, entity_type = row[0], row[1]
+        entity_id = find_entity(con, name, 'person')
+        if entity_id is not None:
+            entity_type = con.execute(
+                "SELECT entity_type FROM Entity WHERE id = ?", (entity_id,)
+            ).fetchone()[0]
         else:
             cur = con.execute(
                 "INSERT INTO Entity (canonical_name, entity_type, status, created_from_log_id) "
@@ -356,13 +353,11 @@ def extract_links(
             continue
 
         # Get or create entity so it appears on the Nodes page
-        row = con.execute(
-            "SELECT id, entity_type FROM Entity "
-            "WHERE LOWER(canonical_name) = LOWER(?) AND merged_into_id IS NULL AND status != 'archived'",
-            (name,),
-        ).fetchone()
-        if row:
-            entity_id, entity_type_str = row[0], row[1]
+        entity_id = find_entity(con, name, 'person')
+        if entity_id is not None:
+            entity_type_str = con.execute(
+                "SELECT entity_type FROM Entity WHERE id = ?", (entity_id,)
+            ).fetchone()[0]
         else:
             hinted_type = (entity_type_hints or {}).get(name.lower(), 'Person')
             cur = con.execute(
