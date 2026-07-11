@@ -82,6 +82,38 @@ def norm_type(raw: str) -> str:
     return _TYPE_MAP.get(raw, raw)
 
 
+_SECTION_LINK_RE = re.compile(r'\[\[([^\]]+)\]\]')
+
+
+def _resolve_section_entity_names(
+    section: str | None,
+    log_entities: list,
+    entity_canonical: dict,
+) -> set | None:
+    """
+    Entity names this task's section header refers to, or None if the section
+    doesn't identify a specific entity (caller should fall back to log-wide
+    matching, e.g. flat notes with no section headers).
+    """
+    if not section:
+        return None
+    linked = {
+        entity_canonical[name.lower()][0]
+        for name in _SECTION_LINK_RE.findall(section)
+        if name.lower() in entity_canonical
+    }
+    if linked:
+        return linked
+    section_l = section.strip().lower()
+    substring_matches = {
+        e.name for e in log_entities
+        if e.name.lower() in section_l or section_l in e.name.lower()
+    }
+    if substring_matches:
+        return substring_matches
+    return None
+
+
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
 class AnnotationOut(BaseModel):
@@ -441,6 +473,11 @@ def create_generated_list(body: GeneratedListCreate):
         """, log_ids_all).fetchall():
             entity_map.setdefault(elog_id, []).append(TaskEntityRef(name=ename, type=etype.lower()))
 
+    entity_canonical: dict[str, tuple[str, str]] = {}
+    for refs in entity_map.values():
+        for ref in refs:
+            entity_canonical[ref.name.lower()] = (ref.name, ref.type)
+
     def _matches(row) -> bool:
         task_id, title, status, source_log_id, tags_json, raw_text, indent, section, log_created_at = row
         tags = _json.loads(tags_json or "[]")
@@ -448,7 +485,12 @@ def create_generated_list(body: GeneratedListCreate):
         if kind == "tag":
             return value in tags
         if kind == "entity":
-            return any(e.name == value for e in entities)
+            if not any(e.name == value for e in entities):
+                return False
+            resolved = _resolve_section_entity_names(section, entities, entity_canonical)
+            if resolved is None:
+                return True  # no section, or section isn't a recognized store — unchanged fallback
+            return value in resolved
         return False
 
     matched = [r for r in all_rows if _matches(r)]
@@ -1001,8 +1043,6 @@ def list_tasks(log_id: Optional[int] = None):
         for ref in refs:
             entity_canonical[ref.name.lower()] = (ref.name, ref.type)
 
-    _section_link_re = re.compile(r'\[\[([^\]]+)\]\]')
-
     result = []
     for task_id, title, status, source_log_id, tags_json, raw_text, indent, section, log_created_at in rows:
         tags = json.loads(tags_json or "[]")
@@ -1012,7 +1052,7 @@ def list_tasks(log_id: Optional[int] = None):
         # those entities rather than inheriting every entity from the log.
         section_entities: list[TaskEntityRef] = []
         if section:
-            for name in _section_link_re.findall(section):
+            for name in _SECTION_LINK_RE.findall(section):
                 canonical = entity_canonical.get(name.lower())
                 if canonical:
                     section_entities.append(TaskEntityRef(name=canonical[0], type=canonical[1]))

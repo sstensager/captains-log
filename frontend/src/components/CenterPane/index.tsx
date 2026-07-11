@@ -509,8 +509,22 @@ function SmartTextarea({
     const ta = ref.current
     const wrap = wrapRef.current
     if (!ta) return
+
+    const oldHeight = ta.offsetHeight
+    const oldScrollTop = wrap ? wrap.scrollTop : 0
+
     ta.style.height = 'auto'
-    ta.style.height = `${ta.scrollHeight}px`
+    const newHeight = ta.scrollHeight
+    ta.style.height = `${newHeight}px`
+
+    // Collapsing to 'auto' also shrinks wrap's scrollHeight, which makes the
+    // browser clamp wrap.scrollTop to 0 even when the final height doesn't
+    // change — so this restore must run unconditionally, not just when the
+    // content height actually changed.
+    if (wrap) {
+      wrap.scrollTop = oldScrollTop + (newHeight - oldHeight)
+    }
+
     if (selAfter.current && wrap) {
       const { start, end } = selAfter.current
       selAfter.current = null
