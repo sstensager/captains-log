@@ -1048,16 +1048,14 @@ def list_tasks(log_id: Optional[int] = None):
         tags = json.loads(tags_json or "[]")
         preview = (raw_text or "").split("\n")[0][:80] or None
 
-        # If the section header contains [[entity links]], scope this task to
-        # those entities rather than inheriting every entity from the log.
-        section_entities: list[TaskEntityRef] = []
-        if section:
-            for name in _SECTION_LINK_RE.findall(section):
-                canonical = entity_canonical.get(name.lower())
-                if canonical:
-                    section_entities.append(TaskEntityRef(name=canonical[0], type=canonical[1]))
-
-        task_entities = section_entities if section_entities else entity_map.get(source_log_id, [])
+        # Scope this task's entities to its section header (via [[link]] or
+        # plain-text match) rather than inheriting every entity from the log.
+        log_entities = entity_map.get(source_log_id, [])
+        resolved_names = _resolve_section_entity_names(section, log_entities, entity_canonical)
+        task_entities = (
+            [e for e in log_entities if e.name in resolved_names]
+            if resolved_names is not None else log_entities
+        )
 
         result.append(TaskOut(
             id=task_id, title=title, status=status, source_log_id=source_log_id,
