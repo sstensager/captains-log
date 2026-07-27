@@ -51,13 +51,21 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
   }
 
   // Adding an item you've added before — one tap, no tag editing, keeps the fast path fast.
-  const addExistingEntry = (item: ShoppingItem) => {
+  // If a store filter is active, the item picks up that store's tag too (building
+  // a Costco list while filtered to Costco should tag everything you add as Costco).
+  const addExistingEntry = async (item: ShoppingItem) => {
     const tempId = pushOptimistic(item.name)
     setQuery('')
     setSuggestions([])
-    addToActiveList({ item_id: item.id })
-      .then(real => settleOptimistic(tempId, real))
-      .catch(() => settleOptimistic(tempId, null))
+    try {
+      if (storeId != null && !item.store_ids.includes(storeId)) {
+        await patchShoppingItem(item.id, { store_ids: [...item.store_ids, storeId] })
+      }
+      const real = await addToActiveList({ item_id: item.id })
+      settleOptimistic(tempId, real)
+    } catch {
+      settleOptimistic(tempId, null)
+    }
   }
 
   // Adding something genuinely new — apply any store tags picked in the inline tag row.
@@ -83,8 +91,12 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
     if (!trimmedQuery) return
     justSubmittedRef.current = true
     const exact = suggestions.find(s => s.name.toLowerCase() === trimmedQuery.toLowerCase())
-    if (exact) addExistingEntry(exact)
-    else addNewEntry(trimmedQuery, newItemTags)
+    if (exact) {
+      addExistingEntry(exact)
+    } else {
+      const effectiveTags = storeId != null && !newItemTags.includes(storeId) ? [...newItemTags, storeId] : newItemTags
+      addNewEntry(trimmedQuery, effectiveTags)
+    }
   }
 
   // Tapping/clicking anywhere outside the whole add area (name field, suggestions,
@@ -141,6 +153,7 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
       {/* Store picker — one tap to filter the list to a specific store */}
       <div className="flex items-center gap-1.5 px-4 py-2 overflow-x-auto shrink-0">
         <button
+          onMouseDown={e => e.preventDefault()}
           onClick={() => setStoreId(null)}
           className={`text-xs px-3 py-1 rounded-full border shrink-0 transition-colors ${
             storeId === null ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-500'
@@ -154,6 +167,7 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
           return (
             <button
               key={store.id}
+              onMouseDown={e => e.preventDefault()}
               onClick={() => setStoreId(store.id)}
               className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border shrink-0 transition-colors"
               style={active
