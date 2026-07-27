@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { addToActiveList, checkOffEntry, createShoppingItem, fetchActiveList, patchShoppingItem, removeActiveEntry, searchShoppingItems } from '../../api'
 import type { ShoppingActiveEntry, ShoppingItem, ShoppingStore } from '../../types'
 import StoreTagInput from './StoreTagInput'
+import { colorForStore } from '../../storeColors'
 
 interface Props {
   stores: ShoppingStore[]
@@ -109,17 +110,24 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
         >
           All stores
         </button>
-        {stores.map(store => (
-          <button
-            key={store.id}
-            onClick={() => setStoreId(store.id)}
-            className={`text-xs px-3 py-1 rounded-full border shrink-0 transition-colors ${
-              storeId === store.id ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-500'
-            }`}
-          >
-            {store.name}
-          </button>
-        ))}
+        {stores.map(store => {
+          const c = colorForStore(store.color)
+          const active = storeId === store.id
+          return (
+            <button
+              key={store.id}
+              onClick={() => setStoreId(store.id)}
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border shrink-0 transition-colors"
+              style={active
+                ? { backgroundColor: c.dot, borderColor: c.dot, color: '#fff' }
+                : { backgroundColor: c.bg, borderColor: c.border, color: c.text }
+              }
+            >
+              {!active && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />}
+              {store.name}
+            </button>
+          )
+        })}
       </div>
 
       {/* Fast add — autocompletes against items you've added before */}
@@ -165,7 +173,7 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
           <div className="p-6 text-sm text-gray-400">Nothing on the list yet.</div>
         ) : (
           entries.map(entry => {
-            const tagNames = stores.filter(s => entry.store_ids.includes(s.id)).map(s => s.name)
+            const tags = stores.filter(s => entry.store_ids.includes(s.id))
             const editing = editingTagsFor === entry.id
             return (
               <div key={entry.id} className="border-t border-gray-100 bg-white">
@@ -179,8 +187,12 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
                   </button>
                   <div className="flex-1 min-w-0 flex items-baseline gap-2">
                     <span className="text-sm text-gray-800 truncate">{entry.item_name}</span>
-                    {!editing && tagNames.length > 0 && (
-                      <span className="text-xs text-gray-400 truncate shrink-0">{tagNames.join(', ')}</span>
+                    {!editing && tags.length > 0 && (
+                      <span className="flex items-center gap-1 shrink-0">
+                        {tags.map(s => (
+                          <span key={s.id} className="w-2 h-2 rounded-full" style={{ backgroundColor: colorForStore(s.color).dot }} title={s.name} />
+                        ))}
+                      </span>
                     )}
                   </div>
                   <button

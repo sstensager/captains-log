@@ -6,6 +6,7 @@ import {
 } from '../../api'
 import type { ShoppingItem, ShoppingPurchase, ShoppingStore } from '../../types'
 import StoreTagInput from './StoreTagInput'
+import { STORE_PALETTE, colorForStore, nextAvailableStoreColor } from '../../storeColors'
 
 interface Props {
   stores: ShoppingStore[]
@@ -48,6 +49,41 @@ function EditableDate({ value, onSave }: { value: string; onSave: (next: string)
     >
       {value}
     </button>
+  )
+}
+
+function ColorDotPicker({ value, onChange }: { value: string | null; onChange: (key: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const current = colorForStore(value)
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        aria-label="Change color"
+        className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+      >
+        <span className="w-3.5 h-3.5 rounded-full ring-1 ring-black/10" style={{ backgroundColor: current.dot }} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-md z-30 p-2 flex flex-wrap gap-2 w-44">
+          {STORE_PALETTE.map(c => (
+            <button
+              key={c.key}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { onChange(c.key); setOpen(false) }}
+              title={c.key}
+              className="w-6 h-6 rounded-full shrink-0"
+              style={{
+                backgroundColor: c.dot,
+                boxShadow: c.key === value ? '0 0 0 2px #fff, 0 0 0 4px #111827' : '0 0 0 1px rgba(0,0,0,0.1)',
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -108,10 +144,16 @@ export default function ManageView({ stores, onStoresChange }: Props) {
   const handleAddStore = () => {
     const name = newStoreName.trim()
     if (!name) return
-    createStore(name).then(store => {
+    const color = nextAvailableStoreColor(stores.map(s => s.color))
+    createStore(name, color).then(store => {
       onStoresChange([...stores, store].sort((a, b) => a.name.localeCompare(b.name)))
       setNewStoreName('')
     })
+  }
+
+  const handleChangeStoreColor = (store: ShoppingStore, color: string) => {
+    onStoresChange(stores.map(s => s.id === store.id ? { ...s, color } : s))
+    patchStore(store.id, { color }).catch(() => {})
   }
 
   const handleArchiveStore = (store: ShoppingStore) => {
@@ -132,20 +174,26 @@ export default function ManageView({ stores, onStoresChange }: Props) {
       <div className="bg-white border border-gray-200 rounded-lg p-4">
         <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Stores</div>
         <div className="flex flex-wrap gap-1.5 mb-2">
-          {stores.map(store => (
-            <span
-              key={store.id}
-              className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border ${
-                store.archived ? 'bg-gray-50 border-gray-200 text-gray-400' : 'bg-gray-100 border-gray-200 text-gray-700'
-              }`}
-            >
-              {store.name}
-              <button onClick={() => handleArchiveStore(store)} className="hover:text-gray-900" title={store.archived ? 'Unarchive' : 'Archive'}>
-                {store.archived ? '↺' : '⊘'}
-              </button>
-              <button onClick={() => handleDeleteStore(store)} className="hover:text-red-600" title="Delete">×</button>
-            </span>
-          ))}
+          {stores.map(store => {
+            const c = colorForStore(store.color)
+            return (
+              <span
+                key={store.id}
+                className="inline-flex items-center gap-1 text-xs pl-1 pr-2 py-1 rounded-full border"
+                style={store.archived
+                  ? { backgroundColor: '#F9FAFB', borderColor: '#E5E7EB', color: '#9CA3AF' }
+                  : { backgroundColor: c.bg, borderColor: c.border, color: c.text }
+                }
+              >
+                <ColorDotPicker value={store.color} onChange={color => handleChangeStoreColor(store, color)} />
+                {store.name}
+                <button onClick={() => handleArchiveStore(store)} className="hover:opacity-70" title={store.archived ? 'Unarchive' : 'Archive'}>
+                  {store.archived ? '↺' : '⊘'}
+                </button>
+                <button onClick={() => handleDeleteStore(store)} className="hover:text-red-600" title="Delete">×</button>
+              </span>
+            )
+          })}
         </div>
         <div className="flex items-center gap-2">
           <input

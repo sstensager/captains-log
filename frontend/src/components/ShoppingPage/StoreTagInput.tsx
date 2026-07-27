@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createStore } from '../../api'
 import type { ShoppingStore } from '../../types'
+import { colorForStore, nextAvailableStoreColor } from '../../storeColors'
 
 interface Props {
   stores: ShoppingStore[]
@@ -37,7 +38,8 @@ export default function StoreTagInput({ stores, selectedIds, onChange, onStoreCr
     if (!trimmed) return
     const exact = stores.find(s => s.name.toLowerCase() === trimmed.toLowerCase())
     if (exact) { addExisting(exact); return }
-    const created = await createStore(trimmed)
+    const color = nextAvailableStoreColor(stores.map(s => s.color))
+    const created = await createStore(trimmed, color)
     onStoreCreated(created)
     onChange([...selectedIds, created.id])
     setText('')
@@ -45,12 +47,19 @@ export default function StoreTagInput({ stores, selectedIds, onChange, onStoreCr
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {selected.map(s => (
-        <span key={s.id} className="inline-flex items-center gap-1 text-xs bg-gray-900 text-white px-2 py-0.5 rounded-full">
-          {s.name}
-          <button onClick={() => removeTag(s.id)} className="hover:text-gray-300">×</button>
-        </span>
-      ))}
+      {selected.map(s => {
+        const c = colorForStore(s.color)
+        return (
+          <span
+            key={s.id}
+            className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
+            style={{ backgroundColor: c.dot, color: '#fff' }}
+          >
+            {s.name}
+            <button onClick={() => removeTag(s.id)} className="hover:opacity-70">×</button>
+          </span>
+        )
+      })}
       <div className="relative">
         <input
           type="text"
@@ -72,8 +81,9 @@ export default function StoreTagInput({ stores, selectedIds, onChange, onStoreCr
                 key={s.id}
                 onMouseDown={e => e.preventDefault()}
                 onClick={() => addExisting(s)}
-                className="w-full text-left text-xs px-3 py-2 hover:bg-gray-50 whitespace-nowrap"
+                className="w-full flex items-center gap-2 text-left text-xs px-3 py-2 hover:bg-gray-50 whitespace-nowrap"
               >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colorForStore(s.color).dot }} />
                 {s.name}
               </button>
             ))}

@@ -146,6 +146,7 @@ export interface ShoppingStore {
   id: number
   name: string
   archived: boolean
+  color: string | null
 }
 
 export interface ShoppingItem {

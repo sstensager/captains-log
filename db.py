@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS ShoppingStore (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
     archived   INTEGER NOT NULL DEFAULT 0,
+    color      TEXT,    -- palette key, e.g. 'blue' — see frontend storeColors.ts
     created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -205,6 +206,7 @@ def _run_migrations(con: sqlite3.Connection) -> None:
         "ALTER TABLE Log ADD COLUMN longitude REAL",
         "ALTER TABLE Entity ADD COLUMN places_enriched_at TEXT",
         "DROP TABLE IF EXISTS GeneratedList",
+        "ALTER TABLE ShoppingStore ADD COLUMN color TEXT",
     ]
     for sql in migrations:
         try:

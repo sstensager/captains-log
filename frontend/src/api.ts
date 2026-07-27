@@ -160,10 +160,10 @@ export const fetchQueryHistory = (): Promise<QueryHistoryItem[]> =>
 export const fetchStores = (includeArchived = false): Promise<ShoppingStore[]> =>
   get(`/shopping/stores?include_archived=${includeArchived}`)
 
-export const createStore = (name: string): Promise<ShoppingStore> =>
-  post('/shopping/stores', { name })
+export const createStore = (name: string, color?: string): Promise<ShoppingStore> =>
+  post('/shopping/stores', { name, color })
 
-export const patchStore = (id: number, body: { name?: string; archived?: boolean }): Promise<ShoppingStore> =>
+export const patchStore = (id: number, body: { name?: string; archived?: boolean; color?: string }): Promise<ShoppingStore> =>
   patch(`/shopping/stores/${id}`, body)
 
 export const deleteStore = (id: number): Promise<void> =>

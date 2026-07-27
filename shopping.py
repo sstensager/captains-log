@@ -44,15 +44,18 @@ class StoreOut(BaseModel):
     id: int
     name: str
     archived: bool
+    color: Optional[str] = None
 
 
 class StoreCreate(BaseModel):
     name: str
+    color: Optional[str] = None
 
 
 class StorePatch(BaseModel):
     name: Optional[str] = None
     archived: Optional[bool] = None
+    color: Optional[str] = None
 
 
 class ItemOut(BaseModel):
@@ -129,12 +132,12 @@ class SuggestionOut(BaseModel):
 @router.get("/stores", response_model=list[StoreOut])
 def list_stores(include_archived: bool = False):
     con = _get_con()
-    sql = "SELECT id, name, archived FROM ShoppingStore"
+    sql = "SELECT id, name, archived, color FROM ShoppingStore"
     if not include_archived:
         sql += " WHERE archived = 0"
     sql += " ORDER BY name COLLATE NOCASE"
     rows = con.execute(sql).fetchall()
-    return [StoreOut(id=r[0], name=r[1], archived=bool(r[2])) for r in rows]
+    return [StoreOut(id=r[0], name=r[1], archived=bool(r[2]), color=r[3]) for r in rows]
 
 
 @router.post("/stores", response_model=StoreOut, status_code=201)
@@ -144,26 +147,27 @@ def create_store(body: StoreCreate):
         raise HTTPException(status_code=400, detail="name is required")
     con = _get_con()
     existing = con.execute(
-        "SELECT id, name, archived FROM ShoppingStore WHERE name = ? COLLATE NOCASE", (name,)
+        "SELECT id, name, archived, color FROM ShoppingStore WHERE name = ? COLLATE NOCASE", (name,)
     ).fetchone()
     if existing:
-        return StoreOut(id=existing[0], name=existing[1], archived=bool(existing[2]))
-    cur = con.execute("INSERT INTO ShoppingStore (name) VALUES (?)", (name,))
+        return StoreOut(id=existing[0], name=existing[1], archived=bool(existing[2]), color=existing[3])
+    cur = con.execute("INSERT INTO ShoppingStore (name, color) VALUES (?, ?)", (name, body.color))
     con.commit()
-    return StoreOut(id=cur.lastrowid, name=name, archived=False)
+    return StoreOut(id=cur.lastrowid, name=name, archived=False, color=body.color)
 
 
 @router.patch("/stores/{store_id}", response_model=StoreOut)
 def patch_store(store_id: int, body: StorePatch):
     con = _get_con()
-    row = con.execute("SELECT id, name, archived FROM ShoppingStore WHERE id = ?", (store_id,)).fetchone()
+    row = con.execute("SELECT id, name, archived, color FROM ShoppingStore WHERE id = ?", (store_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Store not found")
     name = body.name.strip() if body.name is not None else row[1]
     archived = int(body.archived) if body.archived is not None else row[2]
-    con.execute("UPDATE ShoppingStore SET name = ?, archived = ? WHERE id = ?", (name, archived, store_id))
+    color = body.color if body.color is not None else row[3]
+    con.execute("UPDATE ShoppingStore SET name = ?, archived = ?, color = ? WHERE id = ?", (name, archived, color, store_id))
     con.commit()
-    return StoreOut(id=store_id, name=name, archived=bool(archived))
+    return StoreOut(id=store_id, name=name, archived=bool(archived), color=color)
 
 
 @router.delete("/stores/{store_id}", status_code=204)
