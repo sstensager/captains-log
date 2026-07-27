@@ -15,11 +15,16 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from config import (
-    SHOPPING_MIN_PURCHASES_FOR_SUGGESTION,
-    SHOPPING_SUGGESTION_BUFFER_FRACTION,
-    SHOPPING_SUGGESTION_MAX_BUFFER_DAYS,
-)
+try:
+    from config import (
+        SHOPPING_MIN_PURCHASES_FOR_SUGGESTION,
+        SHOPPING_SUGGESTION_BUFFER_FRACTION,
+        SHOPPING_SUGGESTION_MAX_BUFFER_DAYS,
+    )
+except ImportError:
+    SHOPPING_MIN_PURCHASES_FOR_SUGGESTION = 2
+    SHOPPING_SUGGESTION_BUFFER_FRACTION = 0.10
+    SHOPPING_SUGGESTION_MAX_BUFFER_DAYS = 5
 from db import init_db
 
 router = APIRouter(prefix="/api/shopping", tags=["shopping"])
