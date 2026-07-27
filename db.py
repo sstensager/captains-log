@@ -186,6 +186,16 @@ CREATE TABLE IF NOT EXISTS ShoppingPurchase (
     created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_shoppingpurchase_item ON ShoppingPurchase(item_id, purchased_at DESC);
+
+-- Permanent log of "added to the active list" events. Unlike ShoppingListEntry
+-- (transient — deleted on checkoff or removal), these rows are never deleted,
+-- so add frequency/history survives regardless of how the item later left the list.
+CREATE TABLE IF NOT EXISTS ShoppingAddEvent (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id  INTEGER NOT NULL REFERENCES ShoppingItem(id) ON DELETE CASCADE,
+    added_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_shoppingaddevent_item ON ShoppingAddEvent(item_id, added_at DESC);
 """
 
 

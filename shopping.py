@@ -127,6 +127,13 @@ class SuggestionOut(BaseModel):
     days_overdue: int
 
 
+class AddEventOut(BaseModel):
+    id: int
+    item_id: int
+    item_name: str
+    added_at: str
+
+
 # ── Stores ─────────────────────────────────────────────────────────────────────
 
 @router.get("/stores", response_model=list[StoreOut])
@@ -367,8 +374,14 @@ def add_active(body: ActiveAdd):
         )
         entry_id = cur.lastrowid
         added_at = con.execute("SELECT added_at FROM ShoppingListEntry WHERE id = ?", (entry_id,)).fetchone()[0]
+        # Permanent add-history — only for a genuine new add, not a no-op re-add
+        # of something already sitting on the list.
+        con.execute("INSERT INTO ShoppingAddEvent (item_id, added_at) VALUES (?, ?)", (item_id, added_at))
     con.commit()
-    return ActiveEntryOut(id=entry_id, item_id=item_id, item_name=item_name, note=body.note, added_at=added_at)
+    store_ids = [r[0] for r in con.execute(
+        "SELECT store_id FROM ShoppingItemStore WHERE item_id = ?", (item_id,)
+    ).fetchall()]
+    return ActiveEntryOut(id=entry_id, item_id=item_id, item_name=item_name, note=body.note, added_at=added_at, store_ids=store_ids)
 
 
 @router.delete("/active/{entry_id}", status_code=204)
@@ -470,6 +483,22 @@ def delete_purchase(purchase_id: int):
     con = _get_con()
     con.execute("DELETE FROM ShoppingPurchase WHERE id = ?", (purchase_id,))
     con.commit()
+
+
+@router.get("/add-events", response_model=list[AddEventOut])
+def list_add_events(item_id: Optional[int] = None, limit: int = 100):
+    con = _get_con()
+    where = "WHERE ae.item_id = ?" if item_id is not None else ""
+    params = [item_id] if item_id is not None else []
+    rows = con.execute(f"""
+        SELECT ae.id, ae.item_id, si.name, ae.added_at
+        FROM ShoppingAddEvent ae
+        JOIN ShoppingItem si ON si.id = ae.item_id
+        {where}
+        ORDER BY ae.added_at DESC, ae.id DESC
+        LIMIT ?
+    """, params + [limit]).fetchall()
+    return [AddEventOut(id=r[0], item_id=r[1], item_name=r[2], added_at=r[3]) for r in rows]
 
 
 # ── Suggestion engine ────────────────────────────────────────────────────────────

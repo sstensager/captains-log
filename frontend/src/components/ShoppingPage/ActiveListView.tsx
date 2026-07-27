@@ -17,7 +17,10 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
   const [suggestions, setSuggestions] = useState<ShoppingItem[]>([])
   const [newItemTags, setNewItemTags] = useState<number[]>([])
   const [editingTagsFor, setEditingTagsFor] = useState<number | null>(null)
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
+  const [updating, setUpdating] = useState(false)
   const debounceRef = useRef<number | undefined>(undefined)
+  const justSubmittedRef = useRef(false)
 
   const load = (sid: number | null) => {
     fetchActiveList(sid).then(data => { setEntries(data); setLoading(false) })
@@ -78,14 +81,49 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
 
   const handleSubmit = () => {
     if (!trimmedQuery) return
+    justSubmittedRef.current = true
     const exact = suggestions.find(s => s.name.toLowerCase() === trimmedQuery.toLowerCase())
     if (exact) addExistingEntry(exact)
     else addNewEntry(trimmedQuery, newItemTags)
   }
 
-  const checkOff = (entry: ShoppingActiveEntry) => {
-    setEntries(prev => prev.filter(e => e.id !== entry.id))
-    checkOffEntry(entry.id, storeId != null ? { store_id: storeId } : {}).catch(() => load(storeId))
+  // Tapping/clicking anywhere outside the whole add area (name field, suggestions,
+  // tag picker) commits whatever's pending — no separate "confirm" step needed.
+  const handleAddAreaBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return
+    if (justSubmittedRef.current) { justSubmittedRef.current = false; return }
+    if (trimmedQuery) handleSubmit()
+  }
+
+  // Tapping the checkbox only stages it (strikethrough, stays on screen) — a
+  // mis-tap is trivial to undo. "Update" is what actually commits the checkoffs.
+  const toggleChecked = (entryId: number) => {
+    setCheckedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(entryId)) next.delete(entryId)
+      else next.add(entryId)
+      return next
+    })
+  }
+
+  const handleUpdate = async () => {
+    const ids = [...checkedIds]
+    if (ids.length === 0) return
+    setUpdating(true)
+    const results = await Promise.allSettled(
+      ids.map(id => checkOffEntry(id, storeId != null ? { store_id: storeId } : {}))
+    )
+    const succeededIds = ids.filter((_, i) => results[i].status === 'fulfilled')
+    if (succeededIds.length > 0) {
+      setEntries(prev => prev.filter(e => !succeededIds.includes(e.id)))
+      setCheckedIds(prev => {
+        const next = new Set(prev)
+        succeededIds.forEach(id => next.delete(id))
+        return next
+      })
+    }
+    if (succeededIds.length < ids.length) load(storeId) // some failed — resync with server
+    setUpdating(false)
   }
 
   const remove = (entry: ShoppingActiveEntry) => {
@@ -131,11 +169,11 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
       </div>
 
       {/* Fast add — autocompletes against items you've added before */}
-      <div className="relative px-4 pb-3 shrink-0 space-y-1.5">
+      <div className="relative px-4 pb-3 shrink-0 space-y-1.5" onBlur={handleAddAreaBlur}>
         <input
           type="text"
           value={query}
-          onChange={e => { setQuery(e.target.value); if (!e.target.value.trim()) setNewItemTags([]) }}
+          onChange={e => { setQuery(e.target.value); justSubmittedRef.current = false; if (!e.target.value.trim()) setNewItemTags([]) }}
           onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
           placeholder="Add an item…"
           enterKeyHint="done"
@@ -175,25 +213,24 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
           entries.map(entry => {
             const tags = stores.filter(s => entry.store_ids.includes(s.id))
             const editing = editingTagsFor === entry.id
+            const checked = checkedIds.has(entry.id)
             return (
               <div key={entry.id} className="border-t border-gray-100 bg-white">
                 <div className="flex items-center gap-3 px-4 py-2.5">
                   <button
-                    onClick={() => checkOff(entry)}
+                    onClick={() => toggleChecked(entry.id)}
                     aria-label="Mark as bought"
                     className="shrink-0 flex items-center justify-center w-10 h-10 -m-3 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors"
                   >
-                    <span className="w-4 h-4 rounded border border-gray-400" />
+                    <span
+                      className="w-4 h-4 rounded border flex items-center justify-center text-[10px] leading-none"
+                      style={checked ? { backgroundColor: '#111827', borderColor: '#111827', color: '#fff' } : { borderColor: '#9CA3AF' }}
+                    >
+                      {checked && '✓'}
+                    </span>
                   </button>
-                  <div className="flex-1 min-w-0 flex items-baseline gap-2">
-                    <span className="text-sm text-gray-800 truncate">{entry.item_name}</span>
-                    {!editing && tags.length > 0 && (
-                      <span className="flex items-center gap-1 shrink-0">
-                        {tags.map(s => (
-                          <span key={s.id} className="w-2 h-2 rounded-full" style={{ backgroundColor: colorForStore(s.color).dot }} title={s.name} />
-                        ))}
-                      </span>
-                    )}
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm truncate ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{entry.item_name}</div>
                   </div>
                   <button
                     onClick={() => setEditingTagsFor(editing ? null : entry.id)}
@@ -216,6 +253,18 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
                     </svg>
                   </button>
                 </div>
+                {!editing && tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 px-4 pb-2 pl-11 -mt-1">
+                    {tags.map(s => {
+                      const c = colorForStore(s.color)
+                      return (
+                        <span key={s.id} className="text-[10px] leading-4 px-1.5 rounded-full" style={{ backgroundColor: c.bg, color: c.text }}>
+                          {s.name}
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
                 {editing && (
                   <div className="px-4 pb-2.5 pl-11">
                     <StoreTagInput
@@ -231,6 +280,19 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
           })
         )}
       </div>
+
+      {checkedIds.size > 0 && (
+        <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-2.5 border-t border-gray-200 bg-white">
+          <span className="text-xs text-gray-500">{checkedIds.size} checked off</span>
+          <button
+            onClick={handleUpdate}
+            disabled={updating}
+            className="text-sm px-4 py-1.5 rounded-lg bg-gray-900 text-white disabled:opacity-50 transition-colors"
+          >
+            {updating ? 'Updating…' : 'Update'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
