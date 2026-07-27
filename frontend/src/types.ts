@@ -142,34 +142,46 @@ export interface QueryHistoryItem {
   created_at: string
 }
 
-export interface InlineTaskItem {
-  text: string
-  checked: boolean
-}
-
-export interface GeneratedListSection {
-  label: string
-  description: string
-  tasks: TaskOut[]
-  inline_tasks: InlineTaskItem[]
-}
-
-export interface GeneratedListOut {
+export interface ShoppingStore {
   id: number
-  title: string
-  description: string | null
-  filter_json: string
-  sections: GeneratedListSection[]
+  name: string
+  archived: boolean
+}
+
+export interface ShoppingItem {
+  id: number
+  name: string
+  archived: boolean
+  store_ids: number[]
+  last_purchased_at: string | null
+  purchase_count: number
+}
+
+export interface ShoppingActiveEntry {
+  id: number
+  item_id: number
+  item_name: string
+  note: string | null
+  added_at: string
+  store_ids: number[]
+}
+
+export interface ShoppingPurchase {
+  id: number
+  item_id: number
+  item_name: string
+  store_id: number | null
+  store_name: string | null
+  purchased_at: string
   created_at: string
 }
 
-export interface GeneratedListSummary {
-  id: number
-  title: string
-  description: string | null
-  created_at: string
-  updated_at: string | null
-  task_count: number
+export interface ShoppingSuggestion {
+  item_id: number
+  item_name: string
+  last_purchased_at: string
+  interval_days: number
+  days_overdue: number
 }
 
 export type TasksStatusFilter = 'open' | 'done'

@@ -4,11 +4,11 @@ import CenterPane from './components/CenterPane'
 import EntitiesPage from './components/EntitiesPage'
 import TasksPage from './components/TasksPage'
 import AskPage from './components/AskPage'
-import ListsPage from './components/ListsPage'
+import ShoppingPage from './components/ShoppingPage'
 import type { LogDetail, LogSummary, TasksActiveFilter, TasksStatusFilter } from './types'
 import { fetchLogs } from './api'
 
-type Page = 'logs' | 'entities' | 'tasks' | 'lists' | 'ask'
+type Page = 'logs' | 'entities' | 'tasks' | 'shopping' | 'ask'
 type MobileView = 'list' | 'detail'
 type NavSnapshot = {
   page: Page
@@ -31,7 +31,6 @@ export default function App() {
   const [pendingEdit, setPendingEdit] = useState(false)
   const [tasksFilter, setTasksFilter] = useState<TasksActiveFilter>(null)
   const [tasksStatusFilter, setTasksStatusFilter] = useState<TasksStatusFilter>('open')
-  const [listsInitialId, setListsInitialId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchLogs().then(data => { setLogs(data); setLoading(false) })
@@ -180,19 +179,6 @@ export default function App() {
     setMobileView('detail')
   }
 
-  const handleListCreated = (listId: number) => {
-    setPage('lists')
-    setListsInitialId(listId)
-  }
-
-  const handleSelectLogFromLists = (id: number) => {
-    pushNav()
-    setPage('logs')
-    setSelectedLogId(id)
-    setEntityToNavigate(null)
-    setMobileView('detail')
-  }
-
   const handleSelectLogFromAsk = (id: number) => {
     pushNav()
     setPage('logs')
@@ -225,7 +211,7 @@ export default function App() {
     { key: 'logs', label: 'Logs' },
     { key: 'entities', label: 'People & Places' },
     { key: 'tasks', label: 'Todos' },
-    { key: 'lists', label: 'Lists' },
+    { key: 'shopping', label: 'Shopping' },
     { key: 'ask', label: 'Ask' },
   ]
 
@@ -237,7 +223,7 @@ export default function App() {
         {NAV_ITEMS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => { pushNav(); setPage(key); setEntityToNavigate(null); setListsInitialId(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
+            onClick={() => { pushNav(); setPage(key); setEntityToNavigate(null); if (key !== 'tasks') { setTasksFilter(null); setTasksStatusFilter('open') } }}
             className={`text-sm px-3 py-1 rounded transition-colors ${
               page === key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
             }`}
@@ -303,10 +289,9 @@ export default function App() {
             initialFilter={tasksFilter}
             initialStatusFilter={tasksStatusFilter}
             onSnapshot={(f, s) => { setTasksFilter(f); setTasksStatusFilter(s) }}
-            onListCreated={handleListCreated}
           />
-        ) : page === 'lists' ? (
-          <ListsPage initialSelectedId={listsInitialId} onSelectLog={handleSelectLogFromLists} />
+        ) : page === 'shopping' ? (
+          <ShoppingPage />
         ) : (
           <AskPage onSelectLog={handleSelectLogFromAsk} />
         )}

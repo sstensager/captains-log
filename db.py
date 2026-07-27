@@ -140,14 +140,51 @@ CREATE TABLE IF NOT EXISTS QueryHistory (
     created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS GeneratedList (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    title         TEXT    NOT NULL,
-    description   TEXT,
-    filter_json   TEXT    NOT NULL,   -- {"kind": "entity"|"tag", "value": "..."}
-    sections_json TEXT    NOT NULL,   -- JSON array of {label, description, task_ids}
-    created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+-- ── Shopping module ──
+-- Fully self-contained: no foreign keys into Log/Entity/Task/Annotation.
+
+CREATE TABLE IF NOT EXISTS ShoppingStore (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    archived   INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS ShoppingItem (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    archived   INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_shoppingitem_name ON ShoppingItem(name COLLATE NOCASE);
+
+-- 0 rows for an item = valid at every store (agnostic). 1+ rows = restricted
+-- to those stores. No separate "is_agnostic" flag, so it can't drift out of sync.
+CREATE TABLE IF NOT EXISTS ShoppingItemStore (
+    item_id  INTEGER NOT NULL REFERENCES ShoppingItem(id)  ON DELETE CASCADE,
+    store_id INTEGER NOT NULL REFERENCES ShoppingStore(id) ON DELETE CASCADE,
+    PRIMARY KEY (item_id, store_id)
+);
+CREATE INDEX IF NOT EXISTS idx_shoppingitemstore_store ON ShoppingItemStore(store_id);
+
+-- Active list: things currently wanted, pending purchase. Transient.
+CREATE TABLE IF NOT EXISTS ShoppingListEntry (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id  INTEGER NOT NULL REFERENCES ShoppingItem(id) ON DELETE CASCADE,
+    note     TEXT,
+    added_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(item_id)
+);
+
+-- Purchase history: source of truth for "last bought" + frequency calc.
+CREATE TABLE IF NOT EXISTS ShoppingPurchase (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id      INTEGER NOT NULL REFERENCES ShoppingItem(id)  ON DELETE CASCADE,
+    store_id     INTEGER          REFERENCES ShoppingStore(id) ON DELETE SET NULL,
+    purchased_at TEXT    NOT NULL,  -- 'YYYY-MM-DD', user-editable, drives frequency calc
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_shoppingpurchase_item ON ShoppingPurchase(item_id, purchased_at DESC);
 """
 
 
@@ -164,18 +201,10 @@ def _run_migrations(con: sqlite3.Connection) -> None:
         "ALTER TABLE Task ADD COLUMN section TEXT",
         "ALTER TABLE Log ADD COLUMN updated_at TEXT",
         "ALTER TABLE Log ADD COLUMN user_tags TEXT NOT NULL DEFAULT '[]'",
-        """CREATE TABLE IF NOT EXISTS GeneratedList (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            title         TEXT    NOT NULL,
-            description   TEXT,
-            filter_json   TEXT    NOT NULL,
-            sections_json TEXT    NOT NULL,
-            created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
-        )""",
         "ALTER TABLE Log ADD COLUMN latitude REAL",
         "ALTER TABLE Log ADD COLUMN longitude REAL",
         "ALTER TABLE Entity ADD COLUMN places_enriched_at TEXT",
-        "ALTER TABLE GeneratedList ADD COLUMN updated_at TEXT",
+        "DROP TABLE IF EXISTS GeneratedList",
     ]
     for sql in migrations:
         try:

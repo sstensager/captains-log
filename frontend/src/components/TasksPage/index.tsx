@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { createGeneratedList, createLog, fetchAllTasks, patchTask, quickAddTaskToLog } from '../../api'
+import { createLog, fetchAllTasks, patchTask, quickAddTaskToLog } from '../../api'
 import type { TaskEntityRef, TaskOut, TasksActiveFilter, TasksStatusFilter } from '../../types'
 import { colorFor } from '../../colors'
 import { relativeDate } from '../../utils/time'
@@ -11,7 +11,6 @@ interface Props {
   initialFilter?: TasksActiveFilter
   initialStatusFilter?: TasksStatusFilter
   onSnapshot?: (filter: TasksActiveFilter, statusFilter: TasksStatusFilter) => void
-  onListCreated?: (listId: number) => void
 }
 
 // ── Snapshot types ────────────────────────────────────────────────────────────
@@ -105,7 +104,7 @@ function EntityChip({ entity, onClick }: { entity: TaskEntityRef; onClick?: () =
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initialStatusFilter, onSnapshot, onListCreated }: Props) {
+export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initialStatusFilter, onSnapshot }: Props) {
   const [tasks, setTasks] = useState<TaskOut[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatusFilter ?? 'open')
@@ -118,7 +117,6 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
     initialFilter != null ? 'flat' : 'grouped'
   )
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
-  const [organizing, setOrganizing] = useState(false)
   const [addingToGroup, setAddingToGroup] = useState<string | null>(null)
   const [addInput, setAddInput] = useState('')
   const addInputRef = useRef<HTMLInputElement>(null)
@@ -189,19 +187,6 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
     const already = filter?.kind === kind && (filter as any).value === value
     if (already) { setFilter(null); setSearchInput(''); setViewMode('grouped') }
     else { setFilter({ kind, value }); setSearchInput(''); setViewMode('flat') }
-  }
-
-  const handleOrganize = async () => {
-    if (!filter || filter.kind === 'search' || organizing) return
-    setOrganizing(true)
-    try {
-      const list = await createGeneratedList({ kind: filter.kind, value: filter.value })
-      onListCreated?.(list.id)
-    } catch (e) {
-      console.error('Organize failed', e)
-    } finally {
-      setOrganizing(false)
-    }
   }
 
   const openAddInput = (groupKey: string) => {
@@ -453,7 +438,7 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
 
       {/* Task groups */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6">
-        {/* View mode toggle + Organize button — only shown when a filter is active */}
+        {/* View mode toggle — only shown when a filter is active */}
         {filter && (
           <div className="flex items-center gap-2 mb-4 max-w-2xl">
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
@@ -469,25 +454,6 @@ export default function TasksPage({ onSelectLog, onEditLog, initialFilter, initi
                 </button>
               ))}
             </div>
-            {filter.kind !== 'search' && (
-              <button
-                onClick={handleOrganize}
-                disabled={organizing}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 disabled:opacity-50 transition-colors"
-              >
-                {organizing ? (
-                  <>
-                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                    </svg>
-                    Organizing…
-                  </>
-                ) : (
-                  <>✦ Organize</>
-                )}
-              </button>
-            )}
           </div>
         )}
 

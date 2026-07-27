@@ -1,4 +1,4 @@
-import type { AdminStats, EntityDetail, EntitySummary, GeneratedListOut, GeneratedListSummary, LogDetail, LogSummary, QueryHistoryItem, QueryResponse, TaskOut } from './types'
+import type { AdminStats, EntityDetail, EntitySummary, LogDetail, LogSummary, QueryHistoryItem, QueryResponse, ShoppingActiveEntry, ShoppingItem, ShoppingPurchase, ShoppingStore, ShoppingSuggestion, TaskOut } from './types'
 
 const BASE = '/api'
 
@@ -155,31 +155,76 @@ export const naturalLanguageQuery = (q: string): Promise<QueryResponse> => {
 export const fetchQueryHistory = (): Promise<QueryHistoryItem[]> =>
   get('/query/history')
 
-// ── Generated Lists ───────────────────────────────────────────────────────────
+// ── Shopping ──────────────────────────────────────────────────────────────────
 
-export const createGeneratedList = (
-  filter: { kind: 'entity' | 'tag'; value: string }
-): Promise<GeneratedListOut> =>
-  post('/generated-lists', { filter })
+export const fetchStores = (includeArchived = false): Promise<ShoppingStore[]> =>
+  get(`/shopping/stores?include_archived=${includeArchived}`)
 
-export const fetchGeneratedLists = (): Promise<GeneratedListSummary[]> =>
-  get('/generated-lists')
+export const createStore = (name: string): Promise<ShoppingStore> =>
+  post('/shopping/stores', { name })
 
-export const fetchGeneratedList = (id: number): Promise<GeneratedListOut> =>
-  get(`/generated-lists/${id}`)
+export const patchStore = (id: number, body: { name?: string; archived?: boolean }): Promise<ShoppingStore> =>
+  patch(`/shopping/stores/${id}`, body)
 
-export const patchGeneratedList = (
-  id: number,
-  body: {
-    title?: string
-    feedback?: string
-    add_inline_task?: { text: string; section_index: number }
-    toggle_inline_task?: { section_index: number; task_index: number; checked: boolean }
-  },
-): Promise<GeneratedListOut> =>
-  patch(`/generated-lists/${id}`, body)
+export const deleteStore = (id: number): Promise<void> =>
+  del(`/shopping/stores/${id}`)
 
-export const deleteGeneratedList = async (id: number): Promise<void> => {
-  const res = await fetch(`/api/generated-lists/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`DELETE /generated-lists/${id} → ${res.status}`)
+export const searchShoppingItems = (
+  q = '',
+  storeId?: number | null,
+  includeArchived = false,
+): Promise<ShoppingItem[]> => {
+  const params = new URLSearchParams({ q, include_archived: String(includeArchived) })
+  if (storeId != null) params.set('store_id', String(storeId))
+  return get(`/shopping/items?${params.toString()}`)
 }
+
+export const createShoppingItem = (name: string, storeIds: number[] = []): Promise<ShoppingItem> =>
+  post('/shopping/items', { name, store_ids: storeIds })
+
+export const patchShoppingItem = (
+  id: number,
+  body: { name?: string; archived?: boolean; store_ids?: number[] },
+): Promise<ShoppingItem> =>
+  patch(`/shopping/items/${id}`, body)
+
+export const deleteShoppingItem = (id: number): Promise<void> =>
+  del(`/shopping/items/${id}`)
+
+export const fetchActiveList = (storeId?: number | null): Promise<ShoppingActiveEntry[]> =>
+  get(storeId != null ? `/shopping/active?store_id=${storeId}` : '/shopping/active')
+
+export const addToActiveList = (body: { item_id?: number; name?: string; note?: string }): Promise<ShoppingActiveEntry> =>
+  post('/shopping/active', body)
+
+export const removeActiveEntry = (entryId: number): Promise<void> =>
+  del(`/shopping/active/${entryId}`)
+
+export const checkOffEntry = (
+  entryId: number,
+  body: { store_id?: number; purchased_at?: string } = {},
+): Promise<ShoppingPurchase> =>
+  post(`/shopping/active/${entryId}/check-off`, body)
+
+export const fetchPurchases = (itemId?: number, limit = 100): Promise<ShoppingPurchase[]> => {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (itemId != null) params.set('item_id', String(itemId))
+  return get(`/shopping/purchases?${params.toString()}`)
+}
+
+export const createPurchase = (
+  body: { item_id: number; store_id?: number; purchased_at: string },
+): Promise<ShoppingPurchase> =>
+  post('/shopping/purchases', body)
+
+export const patchPurchase = (
+  id: number,
+  body: { purchased_at?: string; store_id?: number },
+): Promise<ShoppingPurchase> =>
+  patch(`/shopping/purchases/${id}`, body)
+
+export const deletePurchase = (id: number): Promise<void> =>
+  del(`/shopping/purchases/${id}`)
+
+export const fetchSuggestions = (): Promise<ShoppingSuggestion[]> =>
+  get('/shopping/suggestions')

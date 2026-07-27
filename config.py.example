@@ -12,3 +12,8 @@ TASK_STATUS_DONE    = 'done'
 # Minimum EntityReference count for background Attribute extraction.
 # Entities below this threshold keep excerpts only; adjust to experiment.
 ATTRIBUTE_EXTRACTION_MIN_REFS = 3
+
+# Shopping suggestion engine — median purchase interval + a small early buffer.
+SHOPPING_MIN_PURCHASES_FOR_SUGGESTION = 2      # need >=1 interval; cold start = no suggestion
+SHOPPING_SUGGESTION_BUFFER_FRACTION   = 0.10
+SHOPPING_SUGGESTION_MAX_BUFFER_DAYS   = 5
