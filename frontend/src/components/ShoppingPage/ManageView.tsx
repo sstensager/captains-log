@@ -5,6 +5,7 @@ import {
   fetchPurchases, patchPurchase, deletePurchase,
 } from '../../api'
 import type { ShoppingItem, ShoppingPurchase, ShoppingStore } from '../../types'
+import StoreTagInput from './StoreTagInput'
 
 interface Props {
   stores: ShoppingStore[]
@@ -99,11 +100,9 @@ export default function ManageView({ stores, onStoresChange }: Props) {
     deleteShoppingItem(item.id).then(() => loadItems(query))
   }
 
-  const handleToggleItemStore = (item: ShoppingItem, storeId: number) => {
-    const next = item.store_ids.includes(storeId)
-      ? item.store_ids.filter(id => id !== storeId)
-      : [...item.store_ids, storeId]
-    patchShoppingItem(item.id, { store_ids: next }).then(() => loadItems(query))
+  const handleUpdateItemStores = (item: ShoppingItem, storeIds: number[]) => {
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, store_ids: storeIds } : i))
+    patchShoppingItem(item.id, { store_ids: storeIds }).catch(() => loadItems(query))
   }
 
   const handleAddStore = () => {
@@ -195,23 +194,16 @@ export default function ManageView({ stores, onStoresChange }: Props) {
               </div>
               {expandedId === item.id && (
                 <div className="px-4 pb-3 pl-9 space-y-2">
-                  {stores.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs text-gray-400">Stores:</span>
-                      {stores.map(store => (
-                        <button
-                          key={store.id}
-                          onClick={() => handleToggleItemStore(item, store.id)}
-                          className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
-                            item.store_ids.includes(store.id) ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-400'
-                          }`}
-                        >
-                          {store.name}
-                        </button>
-                      ))}
-                      <span className="text-xs text-gray-300 italic">(none selected = any store)</span>
-                    </div>
-                  )}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-gray-400 shrink-0">Stores:</span>
+                    <StoreTagInput
+                      stores={stores}
+                      selectedIds={item.store_ids}
+                      onChange={ids => handleUpdateItemStores(item, ids)}
+                      onStoreCreated={s => onStoresChange([...stores, s].sort((a, b) => a.name.localeCompare(b.name)))}
+                    />
+                    <span className="text-xs text-gray-300 italic">(none = any store)</span>
+                  </div>
                   <div className="space-y-1">
                     {(purchasesByItem[item.id] ?? []).map(p => (
                       <div key={p.id} className="flex items-center gap-2 text-xs">

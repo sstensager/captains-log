@@ -38,7 +38,7 @@ export default function ShoppingPage() {
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50">
         {tab === 'list' ? (
-          <ActiveListView stores={stores} />
+          <ActiveListView stores={stores} onStoresChange={setStores} />
         ) : tab === 'suggestions' ? (
           <SuggestionsView />
         ) : (
