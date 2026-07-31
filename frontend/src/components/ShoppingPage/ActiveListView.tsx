@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { addToActiveList, checkOffEntry, createShoppingItem, fetchActiveList, patchShoppingItem, removeActiveEntry, searchShoppingItems } from '../../api'
-import type { ShoppingActiveEntry, ShoppingItem, ShoppingStore } from '../../types'
+import { addToActiveList, checkOffEntry, createShoppingItem, fetchActiveList, fetchSuggestions, patchShoppingItem, removeActiveEntry, searchShoppingItems } from '../../api'
+import type { ShoppingActiveEntry, ShoppingItem, ShoppingStore, ShoppingSuggestion } from '../../types'
 import StoreTagInput from './StoreTagInput'
 import { colorForStore } from '../../storeColors'
 
@@ -15,6 +15,8 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState<ShoppingItem[]>([])
+  const [dueItems, setDueItems] = useState<ShoppingSuggestion[]>([])
+  const [addingDueIds, setAddingDueIds] = useState<Set<number>>(new Set())
   const [newItemTags, setNewItemTags] = useState<number[]>([])
   const [editingTagsFor, setEditingTagsFor] = useState<number | null>(null)
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
@@ -27,6 +29,10 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
   }
 
   useEffect(() => { load(storeId) }, [storeId])
+
+  // Items the repurchase heuristic thinks are due, scoped to whatever store is
+  // filtered — the tap-first path: no typing required for routine restocks.
+  useEffect(() => { fetchSuggestions(storeId).then(setDueItems) }, [storeId])
 
   useEffect(() => {
     if (!query.trim()) { setSuggestions([]); return }
@@ -63,6 +69,7 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
       }
       const real = await addToActiveList({ item_id: item.id })
       settleOptimistic(tempId, real)
+      setDueItems(prev => prev.filter(d => d.item_id !== item.id))
     } catch {
       settleOptimistic(tempId, null)
     }
@@ -82,8 +89,25 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
       }
       const real = await addToActiveList({ item_id: item.id })
       settleOptimistic(tempId, real)
+      setDueItems(prev => prev.filter(d => d.item_id !== item.id))
     } catch {
       settleOptimistic(tempId, null)
+    }
+  }
+
+  // Tapping a "due" chip — same fast path as re-adding a known item, just
+  // sourced from the repurchase heuristic instead of typed search.
+  const addDueItem = async (s: ShoppingSuggestion) => {
+    setAddingDueIds(prev => new Set(prev).add(s.item_id))
+    const tempId = pushOptimistic(s.item_name)
+    try {
+      const real = await addToActiveList({ item_id: s.item_id })
+      settleOptimistic(tempId, real)
+      setDueItems(prev => prev.filter(d => d.item_id !== s.item_id))
+    } catch {
+      settleOptimistic(tempId, null)
+    } finally {
+      setAddingDueIds(prev => { const next = new Set(prev); next.delete(s.item_id); return next })
     }
   }
 
@@ -216,6 +240,22 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
           />
         )}
       </div>
+
+      {/* Due-for-repurchase chips — tap-to-add, no typing. Scoped to the active store filter. */}
+      {!trimmedQuery && dueItems.length > 0 && (
+        <div className="flex items-center gap-1.5 px-4 pb-3 overflow-x-auto shrink-0">
+          {dueItems.map(s => (
+            <button
+              key={s.item_id}
+              onClick={() => addDueItem(s)}
+              disabled={addingDueIds.has(s.item_id)}
+              className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-indigo-600 shrink-0 disabled:opacity-50 transition-colors"
+            >
+              + {s.item_name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Active items */}
       <div className="flex-1 overflow-y-auto">

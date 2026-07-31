@@ -504,16 +504,27 @@ def list_add_events(item_id: Optional[int] = None, limit: int = 100):
 # ── Suggestion engine ────────────────────────────────────────────────────────────
 
 @router.get("/suggestions", response_model=list[SuggestionOut])
-def get_suggestions():
+def get_suggestions(store_id: Optional[int] = None):
     con = _get_con()
     today = date.today()
     suggestions = []
 
-    rows = con.execute("""
+    where = [
+        "si.archived = 0",
+        "NOT EXISTS (SELECT 1 FROM ShoppingListEntry sle WHERE sle.item_id = si.id)",
+    ]
+    params: list = []
+    if store_id is not None:
+        where.append("""(
+            NOT EXISTS (SELECT 1 FROM ShoppingItemStore x WHERE x.item_id = si.id)
+            OR EXISTS (SELECT 1 FROM ShoppingItemStore x WHERE x.item_id = si.id AND x.store_id = ?)
+        )""")
+        params.append(store_id)
+
+    rows = con.execute(f"""
         SELECT si.id, si.name FROM ShoppingItem si
-        WHERE si.archived = 0
-          AND NOT EXISTS (SELECT 1 FROM ShoppingListEntry sle WHERE sle.item_id = si.id)
-    """).fetchall()
+        WHERE {" AND ".join(where)}
+    """, params).fetchall()
 
     for item_id, item_name in rows:
         dates = [

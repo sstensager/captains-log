@@ -226,5 +226,5 @@ export const patchPurchase = (
 export const deletePurchase = (id: number): Promise<void> =>
   del(`/shopping/purchases/${id}`)
 
-export const fetchSuggestions = (): Promise<ShoppingSuggestion[]> =>
-  get('/shopping/suggestions')
+export const fetchSuggestions = (storeId?: number | null): Promise<ShoppingSuggestion[]> =>
+  get(storeId != null ? `/shopping/suggestions?store_id=${storeId}` : '/shopping/suggestions')
