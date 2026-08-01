@@ -355,35 +355,40 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
                       </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => { setEditingTagsFor(null); setRelinkingFor(entry.id) }}
-                    aria-label="Change item"
-                    className="shrink-0 flex items-center justify-center w-10 h-10 -m-3 rounded-full text-gray-300 hover:bg-gray-100 hover:text-gray-600 active:bg-gray-200 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M17.5 3.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 8.5-8.5z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => { setRelinkingFor(null); setEditingTagsFor(editing ? null : entry.id) }}
-                    aria-label="Edit store tags"
-                    className={`shrink-0 flex items-center justify-center w-10 h-10 -m-3 rounded-full transition-colors ${
-                      editing ? 'bg-gray-100 text-gray-700' : 'text-gray-300 hover:bg-gray-100 hover:text-gray-600 active:bg-gray-200'
-                    }`}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5L21 5M3 5L4 7M21 5L20 7M4 7L4 19M20 7L20 19M4 19L20 19M9 19L9 13L15 13L15 19" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => remove(entry)}
-                    aria-label="Remove from list"
-                    className="shrink-0 flex items-center justify-center w-10 h-10 -m-3 rounded-full text-gray-300 hover:bg-gray-100 hover:text-red-600 active:bg-gray-200 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6L18 18M18 6L6 18" />
-                    </svg>
-                  </button>
+                  {/* Grouped with extra gap so the 40px invisible tap zones (padding +
+                      negative-margin trick) don't overlap each other — gap-3 elsewhere
+                      in this row is fine since it's not flanked by another small icon. */}
+                  <div className="flex items-center gap-6 shrink-0">
+                    <button
+                      onClick={() => { setEditingTagsFor(null); setRelinkingFor(entry.id) }}
+                      aria-label="Change item"
+                      className="shrink-0 flex items-center justify-center w-10 h-10 -m-3 rounded-full text-gray-300 hover:bg-gray-100 hover:text-gray-600 active:bg-gray-200 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M17.5 3.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 8.5-8.5z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => { setRelinkingFor(null); setEditingTagsFor(editing ? null : entry.id) }}
+                      aria-label="Edit store tags"
+                      className={`shrink-0 flex items-center justify-center w-10 h-10 -m-3 rounded-full transition-colors ${
+                        editing ? 'bg-gray-100 text-gray-700' : 'text-gray-300 hover:bg-gray-100 hover:text-gray-600 active:bg-gray-200'
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5L21 5M3 5L4 7M21 5L20 7M4 7L4 19M20 7L20 19M4 19L20 19M9 19L9 13L15 13L15 19" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => remove(entry)}
+                      aria-label="Remove from list"
+                      className="shrink-0 flex items-center justify-center w-10 h-10 -m-3 rounded-full text-gray-300 hover:bg-gray-100 hover:text-red-600 active:bg-gray-200 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6L18 18M18 6L6 18" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 {!editing && tags.length > 0 && (
                   <div className="flex flex-wrap gap-1 px-4 pb-2 pl-11 -mt-1">
