@@ -14,8 +14,10 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
   const [entries, setEntries] = useState<ShoppingActiveEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const [focused, setFocused] = useState(false)
   const [suggestions, setSuggestions] = useState<ShoppingItem[]>([])
   const [dueItems, setDueItems] = useState<ShoppingSuggestion[]>([])
+  const [browseItems, setBrowseItems] = useState<ShoppingItem[]>([])
   const [addingDueIds, setAddingDueIds] = useState<Set<number>>(new Set())
   const [newItemTags, setNewItemTags] = useState<number[]>([])
   const [editingTagsFor, setEditingTagsFor] = useState<number | null>(null)
@@ -30,9 +32,14 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
 
   useEffect(() => { load(storeId) }, [storeId])
 
-  // Items the repurchase heuristic thinks are due, scoped to whatever store is
-  // filtered — the tap-first path: no typing required for routine restocks.
-  useEffect(() => { fetchSuggestions(storeId).then(setDueItems) }, [storeId])
+  // Items the repurchase heuristic thinks are due, plus the most recently/frequently
+  // bought items for this store — together, the "best guess" shown the moment you tap
+  // into the field, before typing a single character. Fetched alongside the active
+  // list refresh so the guess is ready instantly on focus, not fetched-on-focus.
+  useEffect(() => {
+    fetchSuggestions(storeId).then(setDueItems)
+    searchShoppingItems('', storeId).then(setBrowseItems)
+  }, [storeId])
 
   useEffect(() => {
     if (!query.trim()) { setSuggestions([]); return }
@@ -45,6 +52,23 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
 
   const trimmedQuery = query.trim()
   const isNewItem = trimmedQuery !== '' && !suggestions.some(s => s.name.toLowerCase() === trimmedQuery.toLowerCase())
+
+  // Merge the two prediction signals for the empty-query "best guess" dropdown:
+  // overdue-for-repurchase items first (strongest signal for "need it now"), then
+  // fill remaining slots with other items known for this store, ranked by recency/
+  // frequency. Anything already on the active list is excluded from both — no point
+  // guessing what's already sitting in front of you.
+  const activeItemIds = new Set(entries.map(e => e.item_id))
+  const dueIds = new Set(dueItems.map(d => d.item_id))
+  const guessDue = dueItems
+    .filter(d => !activeItemIds.has(d.item_id))
+    .map(d => ({ kind: 'due' as const, id: d.item_id, name: d.item_name, hint: 'usually about now', data: d }))
+  const guessBrowse = browseItems
+    .filter(b => !activeItemIds.has(b.id) && !dueIds.has(b.id))
+    .slice(0, Math.max(0, 8 - guessDue.length))
+    .map(b => ({ kind: 'browse' as const, id: b.id, name: b.name, hint: b.last_purchased_at ? `last ${b.last_purchased_at}` : null, data: b }))
+  const guesses = [...guessDue, ...guessBrowse]
+  const visibleSuggestions = suggestions.filter(s => !activeItemIds.has(s.id))
 
   const pushOptimistic = (label: string) => {
     const tempId = -Date.now()
@@ -70,6 +94,7 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
       const real = await addToActiveList({ item_id: item.id })
       settleOptimistic(tempId, real)
       setDueItems(prev => prev.filter(d => d.item_id !== item.id))
+      setBrowseItems(prev => prev.filter(b => b.id !== item.id))
     } catch {
       settleOptimistic(tempId, null)
     }
@@ -90,12 +115,13 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
       const real = await addToActiveList({ item_id: item.id })
       settleOptimistic(tempId, real)
       setDueItems(prev => prev.filter(d => d.item_id !== item.id))
+      setBrowseItems(prev => prev.filter(b => b.id !== item.id))
     } catch {
       settleOptimistic(tempId, null)
     }
   }
 
-  // Tapping a "due" chip — same fast path as re-adding a known item, just
+  // Tapping a "due" guess — same fast path as re-adding a known item, just
   // sourced from the repurchase heuristic instead of typed search.
   const addDueItem = async (s: ShoppingSuggestion) => {
     setAddingDueIds(prev => new Set(prev).add(s.item_id))
@@ -104,6 +130,7 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
       const real = await addToActiveList({ item_id: s.item_id })
       settleOptimistic(tempId, real)
       setDueItems(prev => prev.filter(d => d.item_id !== s.item_id))
+      setBrowseItems(prev => prev.filter(b => b.id !== s.item_id))
     } catch {
       settleOptimistic(tempId, null)
     } finally {
@@ -127,6 +154,7 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
   // tag picker) commits whatever's pending — no separate "confirm" step needed.
   const handleAddAreaBlur = (e: React.FocusEvent<HTMLDivElement>) => {
     if (e.currentTarget.contains(e.relatedTarget as Node)) return
+    setFocused(false)
     if (justSubmittedRef.current) { justSubmittedRef.current = false; return }
     if (trimmedQuery) handleSubmit()
   }
@@ -211,15 +239,35 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
         <input
           type="text"
           value={query}
+          onFocus={() => setFocused(true)}
           onChange={e => { setQuery(e.target.value); justSubmittedRef.current = false; if (!e.target.value.trim()) setNewItemTags([]) }}
           onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
           placeholder="Add an item…"
           enterKeyHint="done"
           className="w-full text-sm bg-white border border-gray-200 rounded-md px-3 py-2 outline-none focus:border-gray-400 placeholder-gray-400"
         />
-        {suggestions.length > 0 && (
+        {/* Empty query, field focused — best guess before you've typed a thing:
+            overdue-for-repurchase items first, then other known-for-this-store items. */}
+        {trimmedQuery === '' && focused && guesses.length > 0 && (
           <div className="absolute left-4 right-4 top-[42px] mt-1 bg-white border border-gray-200 rounded-md shadow-sm z-10 overflow-hidden">
-            {suggestions.map(s => (
+            {guesses.map(g => (
+              <button
+                key={`${g.kind}-${g.id}`}
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => g.kind === 'due' ? addDueItem(g.data) : addExistingEntry(g.data)}
+                disabled={g.kind === 'due' && addingDueIds.has(g.id)}
+                className="w-full text-left text-sm px-3 py-1.5 hover:bg-gray-50 flex items-center justify-between disabled:opacity-50"
+              >
+                <span className="truncate">{g.name}</span>
+                {g.hint && <span className={`text-xs shrink-0 ml-2 ${g.kind === 'due' ? 'text-indigo-500' : 'text-gray-400'}`}>{g.hint}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* Typed query — narrows to matching items, refining as you type. */}
+        {trimmedQuery !== '' && visibleSuggestions.length > 0 && (
+          <div className="absolute left-4 right-4 top-[42px] mt-1 bg-white border border-gray-200 rounded-md shadow-sm z-10 overflow-hidden">
+            {visibleSuggestions.map(s => (
               <button
                 key={s.id}
                 onClick={() => addExistingEntry(s)}
@@ -240,22 +288,6 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
           />
         )}
       </div>
-
-      {/* Due-for-repurchase chips — tap-to-add, no typing. Scoped to the active store filter. */}
-      {!trimmedQuery && dueItems.length > 0 && (
-        <div className="flex items-center gap-1.5 px-4 pb-3 overflow-x-auto shrink-0">
-          {dueItems.map(s => (
-            <button
-              key={s.item_id}
-              onClick={() => addDueItem(s)}
-              disabled={addingDueIds.has(s.item_id)}
-              className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-indigo-600 shrink-0 disabled:opacity-50 transition-colors"
-            >
-              + {s.item_name}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Active items */}
       <div className="flex-1 overflow-y-auto">

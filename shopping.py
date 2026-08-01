@@ -245,7 +245,7 @@ def search_items(q: str = "", store_id: Optional[int] = None, include_archived: 
                  si.name COLLATE NOCASE
         LIMIT ?
     """
-    rows = con.execute(sql, params_prefix + params + [limit]).fetchall()
+    rows = con.execute(sql, params + params_prefix + [limit]).fetchall()
     items = [
         ItemOut(id=r[0], name=r[1], archived=bool(r[2]), last_purchased_at=r[3], purchase_count=r[4])
         for r in rows
