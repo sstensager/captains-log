@@ -1,4 +1,4 @@
-import type { AdminStats, EntityDetail, EntitySummary, LogDetail, LogSummary, QueryHistoryItem, QueryResponse, ShoppingActiveEntry, ShoppingItem, ShoppingPurchase, ShoppingStore, ShoppingSuggestion, TaskOut } from './types'
+import type { AdminStats, EntityDetail, EntitySummary, LogDetail, LogSummary, QueryHistoryItem, QueryResponse, ShoppingActiveEntry, ShoppingAddEvent, ShoppingItem, ShoppingPurchase, ShoppingStore, ShoppingSuggestion, TaskOut } from './types'
 
 const BASE = '/api'
 
@@ -225,6 +225,12 @@ export const patchPurchase = (
 
 export const deletePurchase = (id: number): Promise<void> =>
   del(`/shopping/purchases/${id}`)
+
+export const fetchAddEvents = (itemId?: number, limit = 100): Promise<ShoppingAddEvent[]> => {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (itemId != null) params.set('item_id', String(itemId))
+  return get(`/shopping/add-events?${params.toString()}`)
+}
 
 export const fetchSuggestions = (storeId?: number | null): Promise<ShoppingSuggestion[]> =>
   get(storeId != null ? `/shopping/suggestions?store_id=${storeId}` : '/shopping/suggestions')

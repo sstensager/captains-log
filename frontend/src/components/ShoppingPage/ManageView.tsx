@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import {
   createStore, deleteStore, patchStore,
   patchShoppingItem, deleteShoppingItem, searchShoppingItems,
-  fetchPurchases, patchPurchase, deletePurchase,
+  fetchPurchases, patchPurchase, deletePurchase, fetchAddEvents,
 } from '../../api'
-import type { ShoppingItem, ShoppingPurchase, ShoppingStore } from '../../types'
+import type { ShoppingAddEvent, ShoppingItem, ShoppingPurchase, ShoppingStore } from '../../types'
 import StoreTagInput from './StoreTagInput'
 import { STORE_PALETTE, colorForStore, nextAvailableStoreColor } from '../../storeColors'
 
@@ -92,6 +92,7 @@ export default function ManageView({ stores, onStoresChange }: Props) {
   const [query, setQuery] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [purchasesByItem, setPurchasesByItem] = useState<Record<number, ShoppingPurchase[]>>({})
+  const [addEventsByItem, setAddEventsByItem] = useState<Record<number, ShoppingAddEvent[]>>({})
   const [newStoreName, setNewStoreName] = useState('')
 
   const loadItems = (q: string) => {
@@ -106,6 +107,25 @@ export default function ManageView({ stores, onStoresChange }: Props) {
     if (!purchasesByItem[item.id]) {
       fetchPurchases(item.id).then(p => setPurchasesByItem(prev => ({ ...prev, [item.id]: p })))
     }
+    if (!addEventsByItem[item.id]) {
+      fetchAddEvents(item.id).then(a => setAddEventsByItem(prev => ({ ...prev, [item.id]: a })))
+    }
+  }
+
+  // Merges the two permanent logs — "listed" (ShoppingAddEvent) and "bought"
+  // (ShoppingPurchase) — into one chronological history per item.
+  type TimelineEntry =
+    | { kind: 'added'; at: string; key: string }
+    | { kind: 'bought'; at: string; key: string; purchase: ShoppingPurchase }
+
+  const buildTimeline = (itemId: number): TimelineEntry[] => {
+    const adds = addEventsByItem[itemId] ?? []
+    const purchases = purchasesByItem[itemId] ?? []
+    const entries: TimelineEntry[] = [
+      ...adds.map(a => ({ kind: 'added' as const, at: a.added_at, key: `a${a.id}` })),
+      ...purchases.map(p => ({ kind: 'bought' as const, at: p.purchased_at, key: `p${p.id}`, purchase: p })),
+    ]
+    return entries.sort((a, b) => b.at.localeCompare(a.at))
   }
 
   const handleEditPurchaseDate = (itemId: number, purchase: ShoppingPurchase, next: string) => {
@@ -253,15 +273,28 @@ export default function ManageView({ stores, onStoresChange }: Props) {
                     <span className="text-xs text-gray-300 italic">(none = any store)</span>
                   </div>
                   <div className="space-y-1">
-                    {(purchasesByItem[item.id] ?? []).map(p => (
-                      <div key={p.id} className="flex items-center gap-2 text-xs">
-                        <EditableDate value={p.purchased_at} onSave={next => handleEditPurchaseDate(item.id, p, next)} />
-                        {p.store_name && <span className="text-gray-400">· {p.store_name}</span>}
-                        <button onClick={() => handleDeletePurchase(item.id, p.id)} className="text-gray-300 hover:text-red-600 ml-auto">×</button>
+                    {buildTimeline(item.id).map(entry => (
+                      <div key={entry.key} className="flex items-center gap-2 text-xs">
+                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          entry.kind === 'added' ? 'bg-gray-100 text-gray-500' : 'bg-emerald-50 text-emerald-600'
+                        }`}>
+                          {entry.kind === 'added' ? 'Listed' : 'Bought'}
+                        </span>
+                        {entry.kind === 'bought' ? (
+                          <EditableDate value={entry.purchase.purchased_at} onSave={next => handleEditPurchaseDate(item.id, entry.purchase, next)} />
+                        ) : (
+                          <span className="text-gray-600">{entry.at.slice(0, 10)}</span>
+                        )}
+                        {entry.kind === 'bought' && entry.purchase.store_name && (
+                          <span className="text-gray-400">· {entry.purchase.store_name}</span>
+                        )}
+                        {entry.kind === 'bought' && (
+                          <button onClick={() => handleDeletePurchase(item.id, entry.purchase.id)} className="text-gray-300 hover:text-red-600 ml-auto">×</button>
+                        )}
                       </div>
                     ))}
-                    {(purchasesByItem[item.id] ?? []).length === 0 && (
-                      <div className="text-xs text-gray-300 italic">No purchase history yet</div>
+                    {buildTimeline(item.id).length === 0 && (
+                      <div className="text-xs text-gray-300 italic">No history yet</div>
                     )}
                   </div>
                 </div>

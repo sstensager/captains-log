@@ -177,6 +177,13 @@ export interface ShoppingPurchase {
   created_at: string
 }
 
+export interface ShoppingAddEvent {
+  id: number
+  item_id: number
+  item_name: string
+  added_at: string
+}
+
 export interface ShoppingSuggestion {
   item_id: number
   item_name: string
