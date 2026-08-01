@@ -354,6 +354,22 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
                         {entry.item_name}
                       </div>
                     )}
+                    {/* Store chips live inside this same flex-1 column (not a sibling
+                        row below the whole card) so the row's items-center measures
+                        the true two-line height — otherwise the checkbox/icons only
+                        see the name line and visually sit high above the chip. */}
+                    {!editing && tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {tags.map(s => {
+                          const c = colorForStore(s.color)
+                          return (
+                            <span key={s.id} className="text-[10px] leading-4 px-1.5 rounded-full" style={{ backgroundColor: c.bg, color: c.text }}>
+                              {s.name}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                   {/* Grouped with extra gap so the 40px invisible tap zones (padding +
                       negative-margin trick) don't overlap each other — gap-3 elsewhere
@@ -390,18 +406,6 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
                     </button>
                   </div>
                 </div>
-                {!editing && tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 px-4 pb-2 pl-11 -mt-1">
-                    {tags.map(s => {
-                      const c = colorForStore(s.color)
-                      return (
-                        <span key={s.id} className="text-[10px] leading-4 px-1.5 rounded-full" style={{ backgroundColor: c.bg, color: c.text }}>
-                          {s.name}
-                        </span>
-                      )
-                    })}
-                  </div>
-                )}
                 {editing && (
                   <div className="px-4 pb-2.5 pl-11">
                     <StoreTagInput
