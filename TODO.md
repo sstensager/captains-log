@@ -1,6 +1,6 @@
 # Captain's Log — TODO
 
-*Last updated: 2026-06-06 (session 9)*
+*Last updated: 2026-08-01 (session 10)*
 
 ---
 
@@ -11,13 +11,17 @@
 - "What are Beth's kids' names?"
 - "What did we order last time at Osteria Mozza?"
 
+**Secondary module:** Shopping — store-aware active list, purchase history, repurchase suggestions. Deliberately isolated from the entity/log system (see `shopping.py`, `CLAUDE.md` Architecture). Own section below since it doesn't fit the entity-memory narrative above.
+
 ---
 
 ## ⬅ START HERE NEXT SESSION
 
-**Generated lists — known gap:**
-- The "✦ Organize" button only appears on entity/tag filters, not search filters. Could extend to search if useful.
-- No way to see previously generated lists (ephemeral by design for now). Shareability/linking is a future feature — lists are stored in `GeneratedList` table with a unique ID, ready for a `/shared/lists/:id` route.
+**Shopping — known gaps:**
+- Manage tab's archive/delete item buttons still don't have the 40px tap-target treatment (padding + negative margin) the rest of the module got — currently just `text-xs` inline buttons.
+- "Shopping session" concept (tap "I'm at Costco", get a persisted/named snapshot list distinct from the live store-filtered view) — deferred, no requirements gathered yet.
+- No quantity/notes-per-item field — hasn't come up as a real need yet, don't build ahead of it.
+- `ManageView`'s store-filter pills reuse store *tags*, not actual purchase-store history — intentional (Steve confirmed), but if "purchased at X" ever needs to mean the literal history, that's a different (unbuilt) query.
 
 **NLQ known weaknesses:**
 - **Generic category queries** — "Which campsites have we been to?" surfaces Table Mountain but not Windwolves/Lake Arrowhead. Root cause: parser returns `entity_names=[]` for open-ended category questions because it doesn't know what's in the DB. Medium-term fix: pass top N entity names as context to `parse_query`.
@@ -32,6 +36,16 @@
 - Voice input (Whisper)
 
 ---
+
+## Recently Shipped (session 2026-08-01, session 10)
+
+- **Shopping module introduced (2026-07-26–2026-08-01, retroactive summary)** — replaced the old LLM-organized `GeneratedList`/`organize.py` feature (fully removed) with a standalone, store-aware shopping system: `shopping.py` router at `/api/shopping`, five new tables in `db.py` (`ShoppingStore`, `ShoppingItem`, `ShoppingItemStore`, `ShoppingListEntry`, `ShoppingPurchase`, plus `ShoppingAddEvent` for permanent add-history), `frontend/src/components/ShoppingPage/`. Logically isolated — zero FKs into Log/Entity/Task/Annotation. Store scoping via join-table (0 rows = valid everywhere), active list vs. permanent purchase history as separate tables, per-store colors, suggestion engine v1 (median purchase-interval heuristic, no ML/cron).
+- **Predictive add flow** — tapping the add field shows a best-guess dropdown before typing (overdue-repurchase items first, then recent/frequent items for the active store filter), refining as you type. Fixed a latent SQL param-ordering bug in `search_items` that silently broke store+query combined search.
+- **Listed/bought timeline in Manage** — expanding an item merges its permanent `ShoppingAddEvent` and `ShoppingPurchase` logs into one chronological history.
+- **Relink instead of rename** — new `ItemPicker` component (search existing items or create new) lets you repoint an active-list entry or a past purchase to a different `ShoppingItem` after the fact (e.g. "grabbed a different brand on sale") without merging purchase histories. `PATCH /api/shopping/active/{id}` (409 if target already listed) and extended `PATCH /api/shopping/purchases/{id}` with `item_id`. Triggered via a dedicated pencil icon (not tap-on-text — too easy to misclick), picker opens pre-filled/selected with the current name.
+- **Manage sort + store filter** — sort by recently/never bought, most/least purchased; store-tag filter pills; bumped fetch limit so client-side sort covers the real catalog, not a truncated top-20.
+- **Relative "added" time per list item** — new `agoLabel()` util (day/week/month/year, stays relative indefinitely — different from the existing `relativeDate()` used for logs, which switches to an absolute date after a day).
+- **Mobile tap-target fixes** — action icons on the active-list row need `gap-6` between them, not the row's default `gap-3`, or their 40px invisible tap zones (padding + negative-margin trick) overlap. Icon vertical alignment bugs can come from the *container* (a conditionally-rendered second line, like a store chip, rendering as a DOM sibling outside the centered flex row) as easily as from the icon's own path — check layout before re-deriving icon coordinates.
 
 ## Recently Shipped (session 2026-06-06, session 9)
 
