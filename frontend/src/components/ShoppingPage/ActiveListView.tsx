@@ -345,18 +345,25 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
                       <ItemPicker
                         storeId={storeId}
                         autoFocus
+                        initialText={entry.item_name}
                         onResolve={item => relinkEntry(entry, item)}
                         onCancel={() => setRelinkingFor(null)}
                       />
                     ) : (
-                      <button
-                        onClick={() => { setEditingTagsFor(null); setRelinkingFor(entry.id) }}
-                        className={`text-sm truncate text-left w-full ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}
-                      >
+                      <div className={`text-sm truncate ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                         {entry.item_name}
-                      </button>
+                      </div>
                     )}
                   </div>
+                  <button
+                    onClick={() => { setEditingTagsFor(null); setRelinkingFor(entry.id) }}
+                    aria-label="Change item"
+                    className="shrink-0 flex items-center justify-center w-10 h-10 -m-3 rounded-full text-gray-300 hover:bg-gray-100 hover:text-gray-600 active:bg-gray-200 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M17.5 3.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 8.5-8.5z" />
+                    </svg>
+                  </button>
                   <button
                     onClick={() => { setRelinkingFor(null); setEditingTagsFor(editing ? null : entry.id) }}
                     aria-label="Edit store tags"

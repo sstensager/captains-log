@@ -7,21 +7,27 @@ interface Props {
   onResolve: (item: ShoppingItem) => void
   onCancel: () => void
   autoFocus?: boolean
+  initialText?: string
 }
 
 // Minimal "resolve text to a ShoppingItem" picker — search existing items as you
 // type, or create a new one on the fly. Used for relinking an active-list entry
 // or a purchase to a different item; not a fit for the main add-item flow in
 // ActiveListView, which has its own optimistic-add logic.
-export default function ItemPicker({ storeId, onResolve, onCancel, autoFocus = true }: Props) {
-  const [text, setText] = useState('')
+export default function ItemPicker({ storeId, onResolve, onCancel, autoFocus = true, initialText = '' }: Props) {
+  const [text, setText] = useState(initialText)
   const [results, setResults] = useState<ShoppingItem[]>([])
   const [creating, setCreating] = useState(false)
   const debounceRef = useRef<number | undefined>(undefined)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Pre-filled text stays selected so a first keystroke replaces it outright
+  // (a fresh brand/name), while arrow keys or backspace still let you edit
+  // the existing name in place instead of retyping it from scratch.
   useEffect(() => {
-    if (autoFocus) inputRef.current?.focus()
+    if (!autoFocus) return
+    inputRef.current?.focus()
+    inputRef.current?.select()
   }, [autoFocus])
 
   useEffect(() => {
