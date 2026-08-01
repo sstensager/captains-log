@@ -365,7 +365,7 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
                       className="shrink-0 flex items-center justify-center w-10 h-10 -m-3 rounded-full text-gray-300 hover:bg-gray-100 hover:text-gray-600 active:bg-gray-200 transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M17.5 3.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 8.5-8.5z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.68 19.32l1-4L17.18 4.82a1.5 1.5 0 012 2L8.68 17.32l-4 2z" />
                       </svg>
                     </button>
                     <button
