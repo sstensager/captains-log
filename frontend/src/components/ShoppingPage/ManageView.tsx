@@ -6,7 +6,10 @@ import {
 } from '../../api'
 import type { ShoppingAddEvent, ShoppingItem, ShoppingPurchase, ShoppingStore } from '../../types'
 import StoreTagInput from './StoreTagInput'
+import ItemPicker from './ItemPicker'
 import { STORE_PALETTE, colorForStore, nextAvailableStoreColor } from '../../storeColors'
+
+type SortMode = 'recent' | 'stale' | 'most' | 'least'
 
 interface Props {
   stores: ShoppingStore[]
@@ -94,12 +97,17 @@ export default function ManageView({ stores, onStoresChange }: Props) {
   const [purchasesByItem, setPurchasesByItem] = useState<Record<number, ShoppingPurchase[]>>({})
   const [addEventsByItem, setAddEventsByItem] = useState<Record<number, ShoppingAddEvent[]>>({})
   const [newStoreName, setNewStoreName] = useState('')
+  const [relinkingPurchaseId, setRelinkingPurchaseId] = useState<number | null>(null)
+  const [sortBy, setSortBy] = useState<SortMode>('recent')
+  const [manageStoreId, setManageStoreId] = useState<number | null>(null)
 
-  const loadItems = (q: string) => {
-    searchShoppingItems(q, null, true).then(setItems)
+  // Manage needs the whole catalog (up to a generous cap), not the top-20 the
+  // fast-add typeahead asks for — client-side sort below only sees what's fetched.
+  const loadItems = (q: string, sid: number | null) => {
+    searchShoppingItems(q, sid, true, 500).then(setItems)
   }
 
-  useEffect(() => { loadItems('') }, [])
+  useEffect(() => { loadItems(query, manageStoreId) }, [manageStoreId])
 
   const toggleExpand = (item: ShoppingItem) => {
     if (expandedId === item.id) { setExpandedId(null); return }
@@ -136,30 +144,63 @@ export default function ManageView({ stores, onStoresChange }: Props) {
           .map(p => p.id === updated.id ? updated : p)
           .sort((a, b) => b.purchased_at.localeCompare(a.purchased_at)),
       }))
-      loadItems(query)
+      loadItems(query, manageStoreId)
     })
   }
 
   const handleDeletePurchase = (itemId: number, purchaseId: number) => {
     deletePurchase(purchaseId).then(() => {
       setPurchasesByItem(prev => ({ ...prev, [itemId]: prev[itemId].filter(p => p.id !== purchaseId) }))
-      loadItems(query)
+      loadItems(query, manageStoreId)
+    })
+  }
+
+  // Reassigning a purchase to a different item — refetch both the source and
+  // destination item's purchase history unconditionally (not just invalidate-
+  // and-wait-for-lazy-refetch), since the source item is very likely the one
+  // currently expanded, and cache deletion alone wouldn't retrigger its view.
+  const handleRelinkPurchase = (sourceItemId: number, purchase: ShoppingPurchase, newItem: ShoppingItem) => {
+    patchPurchase(purchase.id, { item_id: newItem.id }).then(() => {
+      Promise.all([
+        fetchPurchases(sourceItemId).then(p => setPurchasesByItem(prev => ({ ...prev, [sourceItemId]: p }))),
+        fetchPurchases(newItem.id).then(p => setPurchasesByItem(prev => ({ ...prev, [newItem.id]: p }))),
+      ]).then(() => setRelinkingPurchaseId(null))
+      loadItems(query, manageStoreId)
     })
   }
 
   const handleArchiveToggle = (item: ShoppingItem) => {
-    patchShoppingItem(item.id, { archived: !item.archived }).then(() => loadItems(query))
+    patchShoppingItem(item.id, { archived: !item.archived }).then(() => loadItems(query, manageStoreId))
   }
 
   const handleDeleteItem = (item: ShoppingItem) => {
     if (!confirm(`Delete "${item.name}"? This erases its purchase history.`)) return
-    deleteShoppingItem(item.id).then(() => loadItems(query))
+    deleteShoppingItem(item.id).then(() => loadItems(query, manageStoreId))
   }
 
   const handleUpdateItemStores = (item: ShoppingItem, storeIds: number[]) => {
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, store_ids: storeIds } : i))
-    patchShoppingItem(item.id, { store_ids: storeIds }).catch(() => loadItems(query))
+    patchShoppingItem(item.id, { store_ids: storeIds }).catch(() => loadItems(query, manageStoreId))
   }
+
+  const sortedItems = [...items].sort((a, b) => {
+    switch (sortBy) {
+      case 'recent':
+        if (a.last_purchased_at == null && b.last_purchased_at == null) return 0
+        if (a.last_purchased_at == null) return 1
+        if (b.last_purchased_at == null) return -1
+        return b.last_purchased_at.localeCompare(a.last_purchased_at)
+      case 'stale':
+        if (a.last_purchased_at == null && b.last_purchased_at == null) return 0
+        if (a.last_purchased_at == null) return -1
+        if (b.last_purchased_at == null) return 1
+        return a.last_purchased_at.localeCompare(b.last_purchased_at)
+      case 'most':
+        return b.purchase_count - a.purchase_count
+      case 'least':
+        return a.purchase_count - b.purchase_count
+    }
+  })
 
   const handleAddStore = () => {
     const name = newStoreName.trim()
@@ -230,17 +271,55 @@ export default function ManageView({ stores, onStoresChange }: Props) {
 
       {/* Items */}
       <div className="bg-white border border-gray-200 rounded-lg">
-        <div className="p-4 border-b border-gray-100">
+        <div className="p-4 border-b border-gray-100 space-y-2">
           <input
             type="text"
             value={query}
-            onChange={e => { setQuery(e.target.value); loadItems(e.target.value) }}
+            onChange={e => { setQuery(e.target.value); loadItems(e.target.value, manageStoreId) }}
             placeholder="Search items…"
             className="w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 outline-none focus:border-gray-400 placeholder-gray-400"
           />
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as SortMode)}
+            className="text-xs border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-gray-400"
+          >
+            <option value="recent">Recently bought</option>
+            <option value="stale">Not bought in a while</option>
+            <option value="most">Most purchased</option>
+            <option value="least">Least purchased</option>
+          </select>
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <button
+              onClick={() => setManageStoreId(null)}
+              className={`text-xs px-3 py-1 rounded-full border shrink-0 transition-colors ${
+                manageStoreId === null ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-500'
+              }`}
+            >
+              All stores
+            </button>
+            {stores.map(store => {
+              const c = colorForStore(store.color)
+              const active = manageStoreId === store.id
+              return (
+                <button
+                  key={store.id}
+                  onClick={() => setManageStoreId(store.id)}
+                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border shrink-0 transition-colors"
+                  style={active
+                    ? { backgroundColor: c.dot, borderColor: c.dot, color: '#fff' }
+                    : { backgroundColor: c.bg, borderColor: c.border, color: c.text }
+                  }
+                >
+                  {!active && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />}
+                  {store.name}
+                </button>
+              )
+            })}
+          </div>
         </div>
         <div>
-          {items.map(item => (
+          {sortedItems.map(item => (
             <div key={item.id} className="border-t border-gray-50 first:border-t-0">
               <div className="flex items-center gap-3 px-4 py-2.5">
                 <button onClick={() => toggleExpand(item)} className="flex-1 min-w-0 text-left flex items-center gap-2">
@@ -274,22 +353,45 @@ export default function ManageView({ stores, onStoresChange }: Props) {
                   </div>
                   <div className="space-y-1">
                     {buildTimeline(item.id).map(entry => (
-                      <div key={entry.key} className="flex items-center gap-2 text-xs">
-                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          entry.kind === 'added' ? 'bg-gray-100 text-gray-500' : 'bg-emerald-50 text-emerald-600'
-                        }`}>
-                          {entry.kind === 'added' ? 'Listed' : 'Bought'}
-                        </span>
-                        {entry.kind === 'bought' ? (
-                          <EditableDate value={entry.purchase.purchased_at} onSave={next => handleEditPurchaseDate(item.id, entry.purchase, next)} />
-                        ) : (
-                          <span className="text-gray-600">{entry.at.slice(0, 10)}</span>
-                        )}
-                        {entry.kind === 'bought' && entry.purchase.store_name && (
-                          <span className="text-gray-400">· {entry.purchase.store_name}</span>
-                        )}
-                        {entry.kind === 'bought' && (
-                          <button onClick={() => handleDeletePurchase(item.id, entry.purchase.id)} className="text-gray-300 hover:text-red-600 ml-auto">×</button>
+                      <div key={entry.key}>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            entry.kind === 'added' ? 'bg-gray-100 text-gray-500' : 'bg-emerald-50 text-emerald-600'
+                          }`}>
+                            {entry.kind === 'added' ? 'Listed' : 'Bought'}
+                          </span>
+                          {entry.kind === 'bought' ? (
+                            <EditableDate value={entry.purchase.purchased_at} onSave={next => handleEditPurchaseDate(item.id, entry.purchase, next)} />
+                          ) : (
+                            <span className="text-gray-600">{entry.at.slice(0, 10)}</span>
+                          )}
+                          {entry.kind === 'bought' && entry.purchase.store_name && (
+                            <span className="text-gray-400">· {entry.purchase.store_name}</span>
+                          )}
+                          {entry.kind === 'bought' && (
+                            <>
+                              <button
+                                onClick={() => setRelinkingPurchaseId(relinkingPurchaseId === entry.purchase.id ? null : entry.purchase.id)}
+                                className="text-gray-300 hover:text-gray-700 ml-auto"
+                                title="Reassign to a different item"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4.5 9a8 8 0 0113.9-3M19.5 15a8 8 0 01-13.9 3" />
+                                </svg>
+                              </button>
+                              <button onClick={() => handleDeletePurchase(item.id, entry.purchase.id)} className="text-gray-300 hover:text-red-600">×</button>
+                            </>
+                          )}
+                        </div>
+                        {entry.kind === 'bought' && relinkingPurchaseId === entry.purchase.id && (
+                          <div className="mt-1">
+                            <ItemPicker
+                              storeId={entry.purchase.store_id ?? undefined}
+                              autoFocus
+                              onResolve={newItem => handleRelinkPurchase(item.id, entry.purchase, newItem)}
+                              onCancel={() => setRelinkingPurchaseId(null)}
+                            />
+                          </div>
                         )}
                       </div>
                     ))}
@@ -301,7 +403,7 @@ export default function ManageView({ stores, onStoresChange }: Props) {
               )}
             </div>
           ))}
-          {items.length === 0 && (
+          {sortedItems.length === 0 && (
             <div className="p-6 text-sm text-gray-400 text-center">No items yet — add some from the List tab.</div>
           )}
         </div>

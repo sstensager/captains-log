@@ -93,6 +93,10 @@ class ActiveAdd(BaseModel):
     note: Optional[str] = None
 
 
+class ActiveRelink(BaseModel):
+    item_id: int
+
+
 class CheckOffBody(BaseModel):
     store_id: Optional[int] = None
     purchased_at: Optional[str] = None
@@ -117,6 +121,7 @@ class PurchaseCreate(BaseModel):
 class PurchasePatch(BaseModel):
     purchased_at: Optional[str] = None
     store_id: Optional[int] = None
+    item_id: Optional[int] = None
 
 
 class SuggestionOut(BaseModel):
@@ -384,6 +389,43 @@ def add_active(body: ActiveAdd):
     return ActiveEntryOut(id=entry_id, item_id=item_id, item_name=item_name, note=body.note, added_at=added_at, store_ids=store_ids)
 
 
+def _active_entry_out(con, entry_id: int) -> ActiveEntryOut:
+    row = con.execute("""
+        SELECT sle.id, sle.item_id, si.name, sle.note, sle.added_at
+        FROM ShoppingListEntry sle JOIN ShoppingItem si ON si.id = sle.item_id
+        WHERE sle.id = ?
+    """, (entry_id,)).fetchone()
+    store_ids = [r[0] for r in con.execute(
+        "SELECT store_id FROM ShoppingItemStore WHERE item_id = ?", (row[1],)
+    ).fetchall()]
+    return ActiveEntryOut(id=row[0], item_id=row[1], item_name=row[2], note=row[3], added_at=row[4], store_ids=store_ids)
+
+
+@router.patch("/active/{entry_id}", response_model=ActiveEntryOut)
+def relink_active(entry_id: int, body: ActiveRelink):
+    # Repoints this entry to a different item — e.g. "I put generic Peanut
+    # Butter on the list but grabbed the on-sale brand instead." Distinct from
+    # renaming the item: relinking preserves both items' independent purchase
+    # histories, a rename would retroactively relabel them together.
+    con = _get_con()
+    entry_row = con.execute("SELECT item_id FROM ShoppingListEntry WHERE id = ?", (entry_id,)).fetchone()
+    if not entry_row:
+        raise HTTPException(status_code=404, detail="Active list entry not found")
+    item_row = con.execute("SELECT id FROM ShoppingItem WHERE id = ?", (body.item_id,)).fetchone()
+    if not item_row:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if body.item_id != entry_row[0]:
+        conflict = con.execute("SELECT id FROM ShoppingListEntry WHERE item_id = ?", (body.item_id,)).fetchone()
+        if conflict:
+            raise HTTPException(status_code=409, detail="Item is already on the list")
+
+    con.execute("UPDATE ShoppingListEntry SET item_id = ? WHERE id = ?", (body.item_id, entry_id))
+    added_at = con.execute("SELECT added_at FROM ShoppingListEntry WHERE id = ?", (entry_id,)).fetchone()[0]
+    con.execute("INSERT INTO ShoppingAddEvent (item_id, added_at) VALUES (?, ?)", (body.item_id, added_at))
+    con.commit()
+    return _active_entry_out(con, entry_id)
+
+
 @router.delete("/active/{entry_id}", status_code=204)
 def remove_active(entry_id: int):
     con = _get_con()
@@ -465,14 +507,22 @@ def create_purchase(body: PurchaseCreate):
 @router.patch("/purchases/{purchase_id}", response_model=PurchaseOut)
 def patch_purchase(purchase_id: int, body: PurchasePatch):
     con = _get_con()
-    row = con.execute("SELECT id, store_id, purchased_at FROM ShoppingPurchase WHERE id = ?", (purchase_id,)).fetchone()
+    row = con.execute("SELECT id, store_id, purchased_at, item_id FROM ShoppingPurchase WHERE id = ?", (purchase_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Purchase not found")
     store_id = body.store_id if body.store_id is not None else row[1]
     purchased_at = body.purchased_at if body.purchased_at is not None else row[2]
+    item_id = row[3]
+    if body.item_id is not None:
+        # Reassign a purchase to a different item — e.g. it got checked off
+        # under the wrong brand and wasn't relinked beforehand.
+        item_row = con.execute("SELECT id FROM ShoppingItem WHERE id = ?", (body.item_id,)).fetchone()
+        if not item_row:
+            raise HTTPException(status_code=404, detail="Item not found")
+        item_id = body.item_id
     con.execute(
-        "UPDATE ShoppingPurchase SET store_id = ?, purchased_at = ? WHERE id = ?",
-        (store_id, purchased_at, purchase_id),
+        "UPDATE ShoppingPurchase SET store_id = ?, purchased_at = ?, item_id = ? WHERE id = ?",
+        (store_id, purchased_at, item_id, purchase_id),
     )
     con.commit()
     return _purchase_out(con, purchase_id)

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { addToActiveList, checkOffEntry, createShoppingItem, fetchActiveList, fetchSuggestions, patchShoppingItem, removeActiveEntry, searchShoppingItems } from '../../api'
+import { addToActiveList, checkOffEntry, createShoppingItem, fetchActiveList, fetchSuggestions, patchShoppingItem, relinkActiveEntry, removeActiveEntry, searchShoppingItems } from '../../api'
 import type { ShoppingActiveEntry, ShoppingItem, ShoppingStore, ShoppingSuggestion } from '../../types'
 import StoreTagInput from './StoreTagInput'
+import ItemPicker from './ItemPicker'
 import { colorForStore } from '../../storeColors'
 
 interface Props {
@@ -21,6 +22,8 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
   const [addingDueIds, setAddingDueIds] = useState<Set<number>>(new Set())
   const [newItemTags, setNewItemTags] = useState<number[]>([])
   const [editingTagsFor, setEditingTagsFor] = useState<number | null>(null)
+  const [relinkingFor, setRelinkingFor] = useState<number | null>(null)
+  const [relinkErrorFor, setRelinkErrorFor] = useState<Record<number, string>>({})
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
   const [updating, setUpdating] = useState(false)
   const debounceRef = useRef<number | undefined>(undefined)
@@ -200,6 +203,25 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
     patchShoppingItem(entry.item_id, { store_ids: ids }).catch(() => load(storeId))
   }
 
+  // Repointing this row to a different item — e.g. same product, different
+  // brand grabbed on sale. Not a rename: the old and new items keep independent
+  // purchase histories, which is the whole reason this exists instead of just
+  // editing the item's name in place.
+  const relinkEntry = async (entry: ShoppingActiveEntry, item: ShoppingItem) => {
+    setRelinkErrorFor(prev => { const { [entry.id]: _omit, ...rest } = prev; return rest })
+    try {
+      if (storeId != null && !item.store_ids.includes(storeId)) {
+        await patchShoppingItem(item.id, { store_ids: [...item.store_ids, storeId] })
+      }
+      const updated = await relinkActiveEntry(entry.id, item.id)
+      setEntries(prev => prev.map(e => e.id === entry.id ? updated : e))
+      setRelinkingFor(null)
+    } catch (err) {
+      const message = String(err).includes('409') ? 'Already on the list' : 'Could not relink — try again'
+      setRelinkErrorFor(prev => ({ ...prev, [entry.id]: message }))
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Store picker — one tap to filter the list to a specific store */}
@@ -316,10 +338,27 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
                     </span>
                   </button>
                   <div className="flex-1 min-w-0">
-                    <div className={`text-sm truncate ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>{entry.item_name}</div>
+                    {relinkErrorFor[entry.id] && (
+                      <div className="text-[11px] text-red-600 mb-0.5">{relinkErrorFor[entry.id]}</div>
+                    )}
+                    {relinkingFor === entry.id ? (
+                      <ItemPicker
+                        storeId={storeId}
+                        autoFocus
+                        onResolve={item => relinkEntry(entry, item)}
+                        onCancel={() => setRelinkingFor(null)}
+                      />
+                    ) : (
+                      <button
+                        onClick={() => { setEditingTagsFor(null); setRelinkingFor(entry.id) }}
+                        className={`text-sm truncate text-left w-full ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}
+                      >
+                        {entry.item_name}
+                      </button>
+                    )}
                   </div>
                   <button
-                    onClick={() => setEditingTagsFor(editing ? null : entry.id)}
+                    onClick={() => { setRelinkingFor(null); setEditingTagsFor(editing ? null : entry.id) }}
                     aria-label="Edit store tags"
                     className={`shrink-0 flex items-center justify-center w-10 h-10 -m-3 rounded-full transition-colors ${
                       editing ? 'bg-gray-100 text-gray-700' : 'text-gray-300 hover:bg-gray-100 hover:text-gray-600 active:bg-gray-200'

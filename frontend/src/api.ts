@@ -173,9 +173,11 @@ export const searchShoppingItems = (
   q = '',
   storeId?: number | null,
   includeArchived = false,
+  limit?: number,
 ): Promise<ShoppingItem[]> => {
   const params = new URLSearchParams({ q, include_archived: String(includeArchived) })
   if (storeId != null) params.set('store_id', String(storeId))
+  if (limit != null) params.set('limit', String(limit))
   return get(`/shopping/items?${params.toString()}`)
 }
 
@@ -196,6 +198,9 @@ export const fetchActiveList = (storeId?: number | null): Promise<ShoppingActive
 
 export const addToActiveList = (body: { item_id?: number; name?: string; note?: string }): Promise<ShoppingActiveEntry> =>
   post('/shopping/active', body)
+
+export const relinkActiveEntry = (entryId: number, itemId: number): Promise<ShoppingActiveEntry> =>
+  patch(`/shopping/active/${entryId}`, { item_id: itemId })
 
 export const removeActiveEntry = (entryId: number): Promise<void> =>
   del(`/shopping/active/${entryId}`)
@@ -219,7 +224,7 @@ export const createPurchase = (
 
 export const patchPurchase = (
   id: number,
-  body: { purchased_at?: string; store_id?: number },
+  body: { purchased_at?: string; store_id?: number; item_id?: number },
 ): Promise<ShoppingPurchase> =>
   patch(`/shopping/purchases/${id}`, body)
 
