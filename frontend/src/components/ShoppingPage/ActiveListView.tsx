@@ -4,6 +4,7 @@ import type { ShoppingActiveEntry, ShoppingItem, ShoppingStore, ShoppingSuggesti
 import StoreTagInput from './StoreTagInput'
 import ItemPicker from './ItemPicker'
 import { colorForStore } from '../../storeColors'
+import { agoLabel } from '../../utils/time'
 
 interface Props {
   stores: ShoppingStore[]
@@ -75,7 +76,7 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
 
   const pushOptimistic = (label: string) => {
     const tempId = -Date.now()
-    setEntries(prev => [...prev, { id: tempId, item_id: -1, item_name: label, note: null, added_at: '', store_ids: [] }])
+    setEntries(prev => [...prev, { id: tempId, item_id: -1, item_name: label, note: null, added_at: new Date().toISOString(), store_ids: [] }])
     return tempId
   }
 
@@ -350,8 +351,11 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
                         onCancel={() => setRelinkingFor(null)}
                       />
                     ) : (
-                      <div className={`text-sm truncate ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                        {entry.item_name}
+                      <div className="flex items-baseline gap-2 min-w-0">
+                        <span className={`text-sm truncate ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                          {entry.item_name}
+                        </span>
+                        <span className="text-[10px] text-gray-400 shrink-0">{agoLabel(entry.added_at)}</span>
                       </div>
                     )}
                     {/* Store chips live inside this same flex-1 column (not a sibling
