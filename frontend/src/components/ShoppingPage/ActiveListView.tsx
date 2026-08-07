@@ -87,17 +87,17 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
   }
 
   // Adding an item you've added before — one tap, no tag editing, keeps the fast path fast.
-  // If exactly one store is filtered, the item picks up that store's tag too (building
-  // a Costco list while filtered to Costco should tag everything you add as Costco).
-  // With 2+ stores filtered at once it's ambiguous which one to tag, so skip auto-tagging
-  // entirely — falls back to the manual tag-icon flow.
+  // The item picks up every currently-filtered store's tag (building a Costco+Ralph's
+  // list while filtered to both should tag everything you add as valid at either —
+  // which store it actually came from gets resolved at checkoff time instead).
   const addExistingEntry = async (item: ShoppingItem) => {
     const tempId = pushOptimistic(item.name)
     setQuery('')
     setSuggestions([])
     try {
-      if (storeIds.length === 1 && !item.store_ids.includes(storeIds[0])) {
-        await patchShoppingItem(item.id, { store_ids: [...item.store_ids, storeIds[0]] })
+      const missingTags = storeIds.filter(id => !item.store_ids.includes(id))
+      if (missingTags.length > 0) {
+        await patchShoppingItem(item.id, { store_ids: [...item.store_ids, ...missingTags] })
       }
       const real = await addToActiveList({ item_id: item.id })
       settleOptimistic(tempId, real)
@@ -153,7 +153,7 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
     if (exact) {
       addExistingEntry(exact)
     } else {
-      const effectiveTags = storeIds.length === 1 && !newItemTags.includes(storeIds[0]) ? [...newItemTags, storeIds[0]] : newItemTags
+      const effectiveTags = [...new Set([...newItemTags, ...storeIds])]
       addNewEntry(trimmedQuery, effectiveTags)
     }
   }
@@ -245,8 +245,9 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
   const relinkEntry = async (entry: ShoppingActiveEntry, item: ShoppingItem) => {
     setRelinkErrorFor(prev => { const { [entry.id]: _omit, ...rest } = prev; return rest })
     try {
-      if (storeIds.length === 1 && !item.store_ids.includes(storeIds[0])) {
-        await patchShoppingItem(item.id, { store_ids: [...item.store_ids, storeIds[0]] })
+      const missingTags = storeIds.filter(id => !item.store_ids.includes(id))
+      if (missingTags.length > 0) {
+        await patchShoppingItem(item.id, { store_ids: [...item.store_ids, ...missingTags] })
       }
       const updated = await relinkActiveEntry(entry.id, item.id)
       setEntries(prev => prev.map(e => e.id === entry.id ? updated : e))
