@@ -171,12 +171,12 @@ export const deleteStore = (id: number): Promise<void> =>
 
 export const searchShoppingItems = (
   q = '',
-  storeId?: number | null,
+  storeIds: number[] = [],
   includeArchived = false,
   limit?: number,
 ): Promise<ShoppingItem[]> => {
   const params = new URLSearchParams({ q, include_archived: String(includeArchived) })
-  if (storeId != null) params.set('store_id', String(storeId))
+  storeIds.forEach(id => params.append('store_ids', String(id)))
   if (limit != null) params.set('limit', String(limit))
   return get(`/shopping/items?${params.toString()}`)
 }
@@ -193,8 +193,12 @@ export const patchShoppingItem = (
 export const deleteShoppingItem = (id: number): Promise<void> =>
   del(`/shopping/items/${id}`)
 
-export const fetchActiveList = (storeId?: number | null): Promise<ShoppingActiveEntry[]> =>
-  get(storeId != null ? `/shopping/active?store_id=${storeId}` : '/shopping/active')
+export const fetchActiveList = (storeIds: number[] = []): Promise<ShoppingActiveEntry[]> => {
+  const params = new URLSearchParams()
+  storeIds.forEach(id => params.append('store_ids', String(id)))
+  const qs = params.toString()
+  return get(qs ? `/shopping/active?${qs}` : '/shopping/active')
+}
 
 export const addToActiveList = (body: { item_id?: number; name?: string; note?: string }): Promise<ShoppingActiveEntry> =>
   post('/shopping/active', body)
@@ -237,5 +241,9 @@ export const fetchAddEvents = (itemId?: number, limit = 100): Promise<ShoppingAd
   return get(`/shopping/add-events?${params.toString()}`)
 }
 
-export const fetchSuggestions = (storeId?: number | null): Promise<ShoppingSuggestion[]> =>
-  get(storeId != null ? `/shopping/suggestions?store_id=${storeId}` : '/shopping/suggestions')
+export const fetchSuggestions = (storeIds: number[] = []): Promise<ShoppingSuggestion[]> => {
+  const params = new URLSearchParams()
+  storeIds.forEach(id => params.append('store_ids', String(id)))
+  const qs = params.toString()
+  return get(qs ? `/shopping/suggestions?${qs}` : '/shopping/suggestions')
+}

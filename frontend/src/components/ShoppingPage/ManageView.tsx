@@ -104,7 +104,7 @@ export default function ManageView({ stores, onStoresChange }: Props) {
   // Manage needs the whole catalog (up to a generous cap), not the top-20 the
   // fast-add typeahead asks for — client-side sort below only sees what's fetched.
   const loadItems = (q: string, sid: number | null) => {
-    searchShoppingItems(q, sid, true, 500).then(setItems)
+    searchShoppingItems(q, sid != null ? [sid] : [], true, 500).then(setItems)
   }
 
   useEffect(() => { loadItems(query, manageStoreId) }, [manageStoreId])

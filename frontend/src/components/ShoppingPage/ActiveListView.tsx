@@ -12,7 +12,7 @@ interface Props {
 }
 
 export default function ActiveListView({ stores, onStoresChange }: Props) {
-  const [storeId, setStoreId] = useState<number | null>(null)
+  const [storeIds, setStoreIds] = useState<number[]>([])
   const [entries, setEntries] = useState<ShoppingActiveEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -26,33 +26,35 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
   const [relinkingFor, setRelinkingFor] = useState<number | null>(null)
   const [relinkErrorFor, setRelinkErrorFor] = useState<Record<number, string>>({})
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
+  const [checkoffStoreFor, setCheckoffStoreFor] = useState<Record<number, number | null>>({})
+  const [disambiguatingFor, setDisambiguatingFor] = useState<{ entryId: number; choices: number[] } | null>(null)
   const [updating, setUpdating] = useState(false)
   const debounceRef = useRef<number | undefined>(undefined)
   const justSubmittedRef = useRef(false)
 
-  const load = (sid: number | null) => {
-    fetchActiveList(sid).then(data => { setEntries(data); setLoading(false) })
+  const load = (sids: number[]) => {
+    fetchActiveList(sids).then(data => { setEntries(data); setLoading(false) })
   }
 
-  useEffect(() => { load(storeId) }, [storeId])
+  useEffect(() => { load(storeIds) }, [storeIds])
 
   // Items the repurchase heuristic thinks are due, plus the most recently/frequently
   // bought items for this store — together, the "best guess" shown the moment you tap
   // into the field, before typing a single character. Fetched alongside the active
   // list refresh so the guess is ready instantly on focus, not fetched-on-focus.
   useEffect(() => {
-    fetchSuggestions(storeId).then(setDueItems)
-    searchShoppingItems('', storeId).then(setBrowseItems)
-  }, [storeId])
+    fetchSuggestions(storeIds).then(setDueItems)
+    searchShoppingItems('', storeIds).then(setBrowseItems)
+  }, [storeIds])
 
   useEffect(() => {
     if (!query.trim()) { setSuggestions([]); return }
     window.clearTimeout(debounceRef.current)
     debounceRef.current = window.setTimeout(() => {
-      searchShoppingItems(query, storeId).then(setSuggestions)
+      searchShoppingItems(query, storeIds).then(setSuggestions)
     }, 150)
     return () => window.clearTimeout(debounceRef.current)
-  }, [query, storeId])
+  }, [query, storeIds])
 
   const trimmedQuery = query.trim()
   const isNewItem = trimmedQuery !== '' && !suggestions.some(s => s.name.toLowerCase() === trimmedQuery.toLowerCase())
@@ -85,15 +87,17 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
   }
 
   // Adding an item you've added before — one tap, no tag editing, keeps the fast path fast.
-  // If a store filter is active, the item picks up that store's tag too (building
+  // If exactly one store is filtered, the item picks up that store's tag too (building
   // a Costco list while filtered to Costco should tag everything you add as Costco).
+  // With 2+ stores filtered at once it's ambiguous which one to tag, so skip auto-tagging
+  // entirely — falls back to the manual tag-icon flow.
   const addExistingEntry = async (item: ShoppingItem) => {
     const tempId = pushOptimistic(item.name)
     setQuery('')
     setSuggestions([])
     try {
-      if (storeId != null && !item.store_ids.includes(storeId)) {
-        await patchShoppingItem(item.id, { store_ids: [...item.store_ids, storeId] })
+      if (storeIds.length === 1 && !item.store_ids.includes(storeIds[0])) {
+        await patchShoppingItem(item.id, { store_ids: [...item.store_ids, storeIds[0]] })
       }
       const real = await addToActiveList({ item_id: item.id })
       settleOptimistic(tempId, real)
@@ -149,7 +153,7 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
     if (exact) {
       addExistingEntry(exact)
     } else {
-      const effectiveTags = storeId != null && !newItemTags.includes(storeId) ? [...newItemTags, storeId] : newItemTags
+      const effectiveTags = storeIds.length === 1 && !newItemTags.includes(storeIds[0]) ? [...newItemTags, storeIds[0]] : newItemTags
       addNewEntry(trimmedQuery, effectiveTags)
     }
   }
@@ -165,13 +169,38 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
 
   // Tapping the checkbox only stages it (strikethrough, stays on screen) — a
   // mis-tap is trivial to undo. "Update" is what actually commits the checkoffs.
-  const toggleChecked = (entryId: number) => {
-    setCheckedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(entryId)) next.delete(entryId)
-      else next.add(entryId)
-      return next
-    })
+  const stage = (entryId: number, store: number | null) => {
+    setCheckedIds(prev => new Set(prev).add(entryId))
+    setCheckoffStoreFor(prev => ({ ...prev, [entryId]: store }))
+  }
+
+  const unstage = (entryId: number) => {
+    setCheckedIds(prev => { const next = new Set(prev); next.delete(entryId); return next })
+    setCheckoffStoreFor(prev => { const { [entryId]: _omit, ...rest } = prev; return rest })
+    setDisambiguatingFor(prev => prev?.entryId === entryId ? null : prev)
+  }
+
+  // With 2+ stores filtered, which store a checkoff belongs to can be ambiguous —
+  // an untagged (agnostic) item, or one explicitly tagged for more than one of the
+  // filtered stores. Unambiguous items (exactly one filtered store fits) still stage
+  // instantly with zero extra taps, same as the single-store-filter case always has.
+  const toggleChecked = (entry: ShoppingActiveEntry) => {
+    if (checkedIds.has(entry.id)) { unstage(entry.id); return }
+    if (storeIds.length >= 2) {
+      const relevant = entry.store_ids.length === 0 ? storeIds : entry.store_ids.filter(id => storeIds.includes(id))
+      if (relevant.length >= 2) {
+        setDisambiguatingFor({ entryId: entry.id, choices: relevant })
+        return
+      }
+      stage(entry.id, relevant[0] ?? null)
+      return
+    }
+    stage(entry.id, storeIds[0] ?? null)
+  }
+
+  const resolveDisambiguation = (entryId: number, chosenStoreId: number) => {
+    stage(entryId, chosenStoreId)
+    setDisambiguatingFor(null)
   }
 
   const handleUpdate = async () => {
@@ -179,7 +208,7 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
     if (ids.length === 0) return
     setUpdating(true)
     const results = await Promise.allSettled(
-      ids.map(id => checkOffEntry(id, storeId != null ? { store_id: storeId } : {}))
+      ids.map(id => checkOffEntry(id, checkoffStoreFor[id] != null ? { store_id: checkoffStoreFor[id]! } : {}))
     )
     const succeededIds = ids.filter((_, i) => results[i].status === 'fulfilled')
     if (succeededIds.length > 0) {
@@ -189,19 +218,24 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
         succeededIds.forEach(id => next.delete(id))
         return next
       })
+      setCheckoffStoreFor(prev => {
+        const next = { ...prev }
+        succeededIds.forEach(id => { delete next[id] })
+        return next
+      })
     }
-    if (succeededIds.length < ids.length) load(storeId) // some failed — resync with server
+    if (succeededIds.length < ids.length) load(storeIds) // some failed — resync with server
     setUpdating(false)
   }
 
   const remove = (entry: ShoppingActiveEntry) => {
     setEntries(prev => prev.filter(e => e.id !== entry.id))
-    removeActiveEntry(entry.id).catch(() => load(storeId))
+    removeActiveEntry(entry.id).catch(() => load(storeIds))
   }
 
   const updateEntryTags = (entry: ShoppingActiveEntry, ids: number[]) => {
     setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, store_ids: ids } : e))
-    patchShoppingItem(entry.item_id, { store_ids: ids }).catch(() => load(storeId))
+    patchShoppingItem(entry.item_id, { store_ids: ids }).catch(() => load(storeIds))
   }
 
   // Repointing this row to a different item — e.g. same product, different
@@ -211,8 +245,8 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
   const relinkEntry = async (entry: ShoppingActiveEntry, item: ShoppingItem) => {
     setRelinkErrorFor(prev => { const { [entry.id]: _omit, ...rest } = prev; return rest })
     try {
-      if (storeId != null && !item.store_ids.includes(storeId)) {
-        await patchShoppingItem(item.id, { store_ids: [...item.store_ids, storeId] })
+      if (storeIds.length === 1 && !item.store_ids.includes(storeIds[0])) {
+        await patchShoppingItem(item.id, { store_ids: [...item.store_ids, storeIds[0]] })
       }
       const updated = await relinkActiveEntry(entry.id, item.id)
       setEntries(prev => prev.map(e => e.id === entry.id ? updated : e))
@@ -225,25 +259,27 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Store picker — one tap to filter the list to a specific store */}
+      {/* Store picker — tap to toggle a store in/out of the filter. Multiple
+          stores selected means "valid at any of these" (OR), for the "either
+          works in a pinch" case, not a single always-current store. */}
       <div className="flex items-center gap-1.5 px-4 py-2 overflow-x-auto shrink-0">
         <button
           onMouseDown={e => e.preventDefault()}
-          onClick={() => setStoreId(null)}
+          onClick={() => setStoreIds([])}
           className={`text-xs px-3 py-1 rounded-full border shrink-0 transition-colors ${
-            storeId === null ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-500'
+            storeIds.length === 0 ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-500'
           }`}
         >
           All stores
         </button>
         {stores.map(store => {
           const c = colorForStore(store.color)
-          const active = storeId === store.id
+          const active = storeIds.includes(store.id)
           return (
             <button
               key={store.id}
               onMouseDown={e => e.preventDefault()}
-              onClick={() => setStoreId(store.id)}
+              onClick={() => setStoreIds(prev => prev.includes(store.id) ? prev.filter(id => id !== store.id) : [...prev, store.id])}
               className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border shrink-0 transition-colors"
               style={active
                 ? { backgroundColor: c.dot, borderColor: c.dot, color: '#fff' }
@@ -326,25 +362,53 @@ export default function ActiveListView({ stores, onStoresChange }: Props) {
             return (
               <div key={entry.id} className="border-t border-gray-100 bg-white">
                 <div className="flex items-center gap-3 px-4 py-2.5">
-                  <button
-                    onClick={() => toggleChecked(entry.id)}
-                    aria-label="Mark as bought"
-                    className="shrink-0 flex items-center justify-center w-10 h-10 -m-3 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors"
-                  >
-                    <span
-                      className="w-4 h-4 rounded border flex items-center justify-center text-[10px] leading-none"
-                      style={checked ? { backgroundColor: '#111827', borderColor: '#111827', color: '#fff' } : { borderColor: '#9CA3AF' }}
+                  <div className="relative shrink-0">
+                    <button
+                      onClick={() => toggleChecked(entry)}
+                      onBlur={() => setTimeout(() => setDisambiguatingFor(prev => prev?.entryId === entry.id ? null : prev), 150)}
+                      aria-label="Mark as bought"
+                      className="shrink-0 flex items-center justify-center w-10 h-10 -m-3 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors"
                     >
-                      {checked && '✓'}
-                    </span>
-                  </button>
+                      <span
+                        className="w-4 h-4 rounded border flex items-center justify-center text-[10px] leading-none"
+                        style={checked ? { backgroundColor: '#111827', borderColor: '#111827', color: '#fff' } : { borderColor: '#9CA3AF' }}
+                      >
+                        {checked && '✓'}
+                      </span>
+                    </button>
+                    {/* "Bought at?" popover — only for items ambiguous under a
+                        multi-store filter (untagged, or tagged for 2+ of the
+                        currently-filtered stores). Picking a store stages the
+                        checkoff; dismissing without picking leaves it unstaged. */}
+                    {disambiguatingFor?.entryId === entry.id && (
+                      <div className="absolute left-0 top-9 z-30 bg-white border border-gray-200 rounded-md shadow-md py-1 min-w-[9rem]">
+                        <div className="text-[10px] text-gray-400 px-3 pt-1 pb-0.5 whitespace-nowrap">Bought at?</div>
+                        {disambiguatingFor.choices.map(id => {
+                          const store = stores.find(s => s.id === id)
+                          if (!store) return null
+                          const c = colorForStore(store.color)
+                          return (
+                            <button
+                              key={id}
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => resolveDisambiguation(entry.id, id)}
+                              className="w-full text-left text-xs px-3 py-1.5 hover:bg-gray-50 flex items-center gap-1.5 whitespace-nowrap"
+                            >
+                              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
+                              {store.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     {relinkErrorFor[entry.id] && (
                       <div className="text-[11px] text-red-600 mb-0.5">{relinkErrorFor[entry.id]}</div>
                     )}
                     {relinkingFor === entry.id ? (
                       <ItemPicker
-                        storeId={storeId}
+                        storeId={storeIds.length === 1 ? storeIds[0] : null}
                         autoFocus
                         initialText={entry.item_name}
                         onResolve={item => relinkEntry(entry, item)}

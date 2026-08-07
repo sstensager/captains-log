@@ -12,7 +12,7 @@ import statistics
 from datetime import date, datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 try:
@@ -36,6 +36,21 @@ def _get_con():
 
 def _today() -> str:
     return date.today().isoformat()
+
+
+def _store_filter_clause(store_ids: list[int]) -> tuple[Optional[str], list]:
+    """Agnostic-or-tagged-for-any-of clause, reused by every ShoppingItem-scoped
+    listing endpoint. An item with 0 ShoppingItemStore rows is valid at every
+    store, so it always passes regardless of which store_ids are given — a
+    single-store list behaves identically to the old single store_id filter."""
+    if not store_ids:
+        return None, []
+    placeholders = ",".join("?" * len(store_ids))
+    clause = f"""(
+        NOT EXISTS (SELECT 1 FROM ShoppingItemStore x WHERE x.item_id = si.id)
+        OR EXISTS (SELECT 1 FROM ShoppingItemStore x WHERE x.item_id = si.id AND x.store_id IN ({placeholders}))
+    )"""
+    return clause, list(store_ids)
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -216,17 +231,15 @@ def _attach_store_ids(con, items: list[ItemOut]) -> None:
 
 
 @router.get("/items", response_model=list[ItemOut])
-def search_items(q: str = "", store_id: Optional[int] = None, include_archived: bool = False, limit: int = 20):
+def search_items(q: str = "", store_ids: list[int] = Query([]), include_archived: bool = False, limit: int = 20):
     con = _get_con()
     q = q.strip()
     where = ["1=1"] if include_archived else ["si.archived = 0"]
     params: list = []
-    if store_id is not None:
-        where.append("""(
-            NOT EXISTS (SELECT 1 FROM ShoppingItemStore x WHERE x.item_id = si.id)
-            OR EXISTS (SELECT 1 FROM ShoppingItemStore x WHERE x.item_id = si.id AND x.store_id = ?)
-        )""")
-        params.append(store_id)
+    clause, cparams = _store_filter_clause(store_ids)
+    if clause:
+        where.append(clause)
+        params.extend(cparams)
     if q:
         where.append("si.name LIKE ?")
         params.append(f"%{q}%")
@@ -314,16 +327,14 @@ def delete_item(item_id: int):
 # ── Active list ────────────────────────────────────────────────────────────────
 
 @router.get("/active", response_model=list[ActiveEntryOut])
-def list_active(store_id: Optional[int] = None):
+def list_active(store_ids: list[int] = Query([])):
     con = _get_con()
     where = ["1=1"]
     params: list = []
-    if store_id is not None:
-        where.append("""(
-            NOT EXISTS (SELECT 1 FROM ShoppingItemStore x WHERE x.item_id = si.id)
-            OR EXISTS (SELECT 1 FROM ShoppingItemStore x WHERE x.item_id = si.id AND x.store_id = ?)
-        )""")
-        params.append(store_id)
+    clause, cparams = _store_filter_clause(store_ids)
+    if clause:
+        where.append(clause)
+        params.extend(cparams)
     rows = con.execute(f"""
         SELECT sle.id, sle.item_id, si.name, sle.note, sle.added_at
         FROM ShoppingListEntry sle
@@ -554,7 +565,7 @@ def list_add_events(item_id: Optional[int] = None, limit: int = 100):
 # ── Suggestion engine ────────────────────────────────────────────────────────────
 
 @router.get("/suggestions", response_model=list[SuggestionOut])
-def get_suggestions(store_id: Optional[int] = None):
+def get_suggestions(store_ids: list[int] = Query([])):
     con = _get_con()
     today = date.today()
     suggestions = []
@@ -564,12 +575,10 @@ def get_suggestions(store_id: Optional[int] = None):
         "NOT EXISTS (SELECT 1 FROM ShoppingListEntry sle WHERE sle.item_id = si.id)",
     ]
     params: list = []
-    if store_id is not None:
-        where.append("""(
-            NOT EXISTS (SELECT 1 FROM ShoppingItemStore x WHERE x.item_id = si.id)
-            OR EXISTS (SELECT 1 FROM ShoppingItemStore x WHERE x.item_id = si.id AND x.store_id = ?)
-        )""")
-        params.append(store_id)
+    clause, cparams = _store_filter_clause(store_ids)
+    if clause:
+        where.append(clause)
+        params.extend(cparams)
 
     rows = con.execute(f"""
         SELECT si.id, si.name FROM ShoppingItem si

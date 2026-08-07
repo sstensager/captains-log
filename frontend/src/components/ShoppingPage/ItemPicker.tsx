@@ -34,7 +34,7 @@ export default function ItemPicker({ storeId, onResolve, onCancel, autoFocus = t
     if (!text.trim()) { setResults([]); return }
     window.clearTimeout(debounceRef.current)
     debounceRef.current = window.setTimeout(() => {
-      searchShoppingItems(text, storeId ?? null).then(setResults)
+      searchShoppingItems(text, storeId != null ? [storeId] : []).then(setResults)
     }, 150)
     return () => window.clearTimeout(debounceRef.current)
   }, [text, storeId])
