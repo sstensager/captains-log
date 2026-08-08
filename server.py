@@ -1398,9 +1398,15 @@ _STATIC_DIR = Path(__file__).parent / "frontend" / "dist"
 if _STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=_STATIC_DIR / "assets"), name="assets")
 
+    # index.html has no content hash in its filename (unlike /assets/*.js|css, which
+    # are safe to cache forever), so it needs an explicit no-cache header — otherwise
+    # a browser can keep serving a stale shell (pointing at an old JS bundle) across
+    # deploys via heuristic caching, silently running old code indefinitely.
+    _NO_CACHE_HEADERS = {"Cache-Control": "no-cache, must-revalidate"}
+
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
         candidate = _STATIC_DIR / full_path
-        if candidate.is_file():
+        if candidate.is_file() and candidate.name != "index.html":
             return FileResponse(candidate)
-        return FileResponse(_STATIC_DIR / "index.html")
+        return FileResponse(_STATIC_DIR / "index.html", headers=_NO_CACHE_HEADERS)
